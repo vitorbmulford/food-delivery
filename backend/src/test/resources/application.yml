@@ -7,3 +7,10 @@ auth:
 spring:
   jpa:
     open-in-view: false
+geocoding:
+  nominatim:
+    # Integration tests must never call the public Nominatim service.
+    base-url: http://127.0.0.1:1
+    user-agent: "foody-delivery-test/1.0 (contact: test@example.com)"
+    connect-timeout: 50ms
+    read-timeout: 50ms

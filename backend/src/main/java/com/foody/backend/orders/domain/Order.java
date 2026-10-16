@@ -1,6 +1,8 @@
 package com.foody.backend.orders.domain;
 
 import com.foody.backend.auth.domain.User;
+import com.foody.backend.geocoding.domain.GeoCoordinates;
+import com.foody.backend.geocoding.domain.GeocodingStatus;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
@@ -44,6 +46,15 @@ public class Order {
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+    @Column(precision = 9, scale = 6)
+    private BigDecimal latitude;
+    @Column(precision = 9, scale = 6)
+    private BigDecimal longitude;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "geocoding_status", nullable = false, length = 20)
+    private GeocodingStatus geocodingStatus;
+    @Column(name = "geocoding_last_attempt_at")
+    private Instant geocodingLastAttemptAt;
     @Version
     private Long version;
 
@@ -61,6 +72,7 @@ public class Order {
         this.totalAmount = money(this.items.stream().map(OrderItem::getSubtotal).reduce(BigDecimal.ZERO, BigDecimal::add));
         this.createdAt = now;
         this.updatedAt = now;
+        this.geocodingStatus = GeocodingStatus.PENDING;
     }
 
     public void transitionTo(OrderStatus target, Instant now) {
@@ -69,6 +81,23 @@ public class Order {
         }
         status = target;
         updatedAt = now;
+    }
+
+    public boolean prepareGeocoding(Instant now) {
+        if (latitude != null || longitude != null) {
+            return false;
+        }
+        geocodingStatus = GeocodingStatus.PENDING;
+        geocodingLastAttemptAt = now;
+        return true;
+    }
+
+    public void applyGeocoding(GeocodingStatus result, GeoCoordinates coordinates) {
+        geocodingStatus = result;
+        if (result == GeocodingStatus.SUCCESS && coordinates != null) {
+            latitude = coordinates.latitude();
+            longitude = coordinates.longitude();
+        }
     }
 
     private static BigDecimal money(BigDecimal amount) { return amount.setScale(MONEY_SCALE, RoundingMode.HALF_UP); }
@@ -81,4 +110,7 @@ public class Order {
     public BigDecimal getTotalAmount() { return totalAmount; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public GeoCoordinates getCoordinates() { return latitude == null ? null : new GeoCoordinates(latitude, longitude); }
+    public GeocodingStatus getGeocodingStatus() { return geocodingStatus; }
+    public Instant getGeocodingLastAttemptAt() { return geocodingLastAttemptAt; }
 }

@@ -5,6 +5,7 @@ import com.foody.backend.auth.infrastructure.persistence.UserRepository;
 import com.foody.backend.orders.api.dto.CreateOrderItemRequest;
 import com.foody.backend.orders.api.dto.CreateOrderRequest;
 import com.foody.backend.orders.api.dto.DeliveryAddressResponse;
+import com.foody.backend.orders.api.dto.GeoCoordinatesResponse;
 import com.foody.backend.orders.api.dto.OrderCustomerResponse;
 import com.foody.backend.orders.api.dto.OrderItemResponse;
 import com.foody.backend.orders.api.dto.OrderResponse;
@@ -13,6 +14,8 @@ import com.foody.backend.orders.domain.Order;
 import com.foody.backend.orders.domain.OrderItem;
 import com.foody.backend.orders.domain.OrderStatus;
 import com.foody.backend.orders.infrastructure.persistence.OrderRepository;
+import com.foody.backend.geocoding.application.GeocodingDispatcher;
+import com.foody.backend.geocoding.application.OrderGeocodingRequestedEvent;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -21,6 +24,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -29,10 +33,14 @@ public class OrderService {
     private static final int MAX_PAGE_SIZE = 50;
     private final OrderRepository orders;
     private final UserRepository users;
+    private final ApplicationEventPublisher events;
+    private final GeocodingDispatcher geocoding;
 
-    public OrderService(OrderRepository orders, UserRepository users) {
+    public OrderService(OrderRepository orders, UserRepository users, ApplicationEventPublisher events, GeocodingDispatcher geocoding) {
         this.orders = orders;
         this.users = users;
+        this.events = events;
+        this.geocoding = geocoding;
     }
 
     @Transactional
@@ -44,7 +52,9 @@ public class OrderService {
         List<OrderItem> items = request.items().stream()
                 .map(item -> new OrderItem(item.productName(), item.quantity(), item.unitPrice()))
                 .toList();
-        return toResponse(orders.save(new Order(customer, address, items, Instant.now())));
+        Order order = orders.save(new Order(customer, address, items, Instant.now()));
+        events.publishEvent(new OrderGeocodingRequestedEvent(order.getId()));
+        return toResponse(order);
     }
 
     @Transactional(readOnly = true)
@@ -68,6 +78,15 @@ public class OrderService {
         return toResponse(order);
     }
 
+    @Transactional(readOnly = true)
+    public boolean requestGeocoding(UUID customerId, UUID id) {
+        Order order = findOwned(id, customerId);
+        if (order.getCoordinates() != null) {
+            return false;
+        }
+        return geocoding.schedule(id);
+    }
+
     private Order findOwned(UUID id, UUID customerId) {
         return orders.findByIdAndCustomerId(id, customerId).orElseThrow(OrderNotFoundException::new);
     }
@@ -77,6 +96,8 @@ public class OrderService {
         return new OrderResponse(order.getId(), new OrderCustomerResponse(order.getCustomer().getId(), order.getCustomer().getName(), order.getCustomer().getEmail()),
                 order.getStatus(), order.getItems().stream().map(item -> new OrderItemResponse(item.getId(), item.getProductName(), item.getQuantity(), item.getUnitPrice(), item.getSubtotal())).toList(),
                 new DeliveryAddressResponse(address.getStreet(), address.getNumber(), address.getComplement(), address.getNeighborhood(), address.getCity(), address.getState(), address.getPostalCode()),
-                order.getTotalAmount(), order.getCreatedAt(), order.getUpdatedAt());
+                order.getTotalAmount(), order.getCreatedAt(), order.getUpdatedAt(),
+                order.getCoordinates() == null ? null : new GeoCoordinatesResponse(order.getCoordinates().latitude(), order.getCoordinates().longitude()),
+                order.getGeocodingStatus());
     }
 }

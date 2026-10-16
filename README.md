@@ -114,8 +114,30 @@ Itens exigem nome, quantidade maior que zero e preço unitário maior que zero; 
 
 Transições inválidas e conflitos de atualização concorrente retornam `409 Conflict`; status ausente ou inválido retornam `400 Bad Request`. Para demonstrar o fluxo do MVP, o próprio cliente pode avançar o status. Em produção, esse endpoint deve ser limitado a restaurante, operação ou logística autorizados.
 
-O schema é criado pela migration Flyway `V2__create_orders.sql`, incluindo itens, endereço incorporado, índices de consulta e versão para optimistic locking. O Swagger documenta os endpoints em `/swagger-ui/index.html` e permite executá-los após informar o JWT em **Authorize**.
+O schema é criado pelas migrations Flyway `V2__create_orders.sql` e `V3__add_order_geocoding.sql`, incluindo itens, endereço incorporado, índices de consulta, versão para optimistic locking e campos de geocodificação. O Swagger documenta os endpoints em `/swagger-ui/index.html` e permite executá-los após informar o JWT em **Authorize**.
+
+## Geocodificação
+
+Ao criar um pedido, ele é persistido primeiro com `geocodingStatus: PENDING`. Após o commit no banco, uma tarefa assíncrona em memória consulta o [Nominatim / OpenStreetMap](https://operations.osmfoundation.org/policies/nominatim/) e atualiza o pedido. A criação do pedido nunca espera nem falha por causa do provedor externo.
+
+- `PENDING`: aguardando ou executando uma consulta.
+- `SUCCESS`: latitude e longitude foram encontradas e persistidas.
+- `NOT_FOUND`: o provedor não encontrou resultado; `coordinates` fica `null`.
+- `FAILED`: timeout, rede indisponível, HTTP 429/5xx ou resposta inválida; `coordinates` fica `null`.
+
+`GET /api/orders` e `GET /api/orders/{id}` incluem `coordinates` e `geocodingStatus`. O proprietário pode solicitar nova tentativa com `POST /api/orders/{id}/geocode`, que retorna `202 Accepted`. Coordenadas válidas não são sobrescritas e um guard em memória impede tentativas simultâneas para o mesmo pedido.
+
+```json
+{
+  "coordinates": { "latitude": -23.5614, "longitude": -46.6559 },
+  "geocodingStatus": "SUCCESS"
+}
+```
+
+Configure `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT`, `NOMINATIM_CONNECT_TIMEOUT` e `NOMINATIM_READ_TIMEOUT` no `.env`. O limite é deliberadamente de uma requisição por segundo, com `User-Agent` identificável. O serviço público não deve ser usado para geocodificação em massa; em produção use contato real no User-Agent e avalie provedor gerenciado ou auto-hospedado conforme o volume.
+
+A fila e o guard de duplicidade são somente em memória: tentativas em espera ou em andamento não são retomadas após reinício. O endpoint de reprocessamento é a recuperação manual segura. Os testes automatizados usam um servidor HTTP local simulado e nunca dependem do Nominatim público.
 
 ## Fora do escopo
 
-Histórico de status, atualizações por WebSocket, geocodificação, catálogo, estoque, pagamentos e frontend React continuam fora do escopo.
+Histórico de status, atualizações por WebSocket, mapas, rastreamento GPS, rotas, cálculo de distância/frete, catálogo, estoque, pagamentos e frontend React continuam fora do escopo.
