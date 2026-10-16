@@ -23,6 +23,12 @@ auth:
     issuer: ${JWT_ISSUER:foody-delivery}
     expiration-seconds: ${JWT_EXPIRATION_SECONDS:3600}
     allowed-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
+geocoding:
+  nominatim:
+    base-url: ${NOMINATIM_BASE_URL:https://nominatim.openstreetmap.org}
+    user-agent: "${NOMINATIM_USER_AGENT:foody-delivery/1.0 (contact: admin@example.com)}"
+    connect-timeout: ${NOMINATIM_CONNECT_TIMEOUT:2s}
+    read-timeout: ${NOMINATIM_READ_TIMEOUT:5s}
 server:
   port: ${SERVER_PORT:8080}
 logging:

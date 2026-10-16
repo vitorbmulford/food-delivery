@@ -78,5 +78,14 @@ public class OrderController {
         return orders.updateStatus(customerId(jwt), id, request.status());
     }
 
+    @PostMapping("/{id}/geocode")
+    @Operation(summary = "Request delivery-address geocoding", description = "Queues one asynchronous Nominatim lookup for the authenticated customer's order. Existing valid coordinates are preserved.")
+    @ApiResponse(responseCode = "202", description = "Geocoding accepted or already in progress")
+    @ApiResponse(responseCode = "404", description = "Order not found")
+    public ResponseEntity<Void> geocode(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        orders.requestGeocoding(customerId(jwt), id);
+        return ResponseEntity.accepted().build();
+    }
+
     private UUID customerId(Jwt jwt) { return UUID.fromString(jwt.getSubject()); }
 }

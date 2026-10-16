@@ -8,6 +8,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import com.foody.backend.geocoding.domain.GeoCoordinates;
+import com.foody.backend.geocoding.domain.GeocodingStatus;
+import com.foody.backend.orders.infrastructure.persistence.OrderRepository;
+import java.math.BigDecimal;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,6 +30,7 @@ class OrdersIntegrationTests {
             {"items":[{"productName":"Hambúrguer Artesanal","quantity":2,"unitPrice":32.90},{"productName":"Refrigerante","quantity":1,"unitPrice":8.50}],
             "deliveryAddress":{"street":"Rua das Flores","number":"120","complement":"Apto 42","neighborhood":"Centro","city":"São Paulo","state":"SP","postalCode":"01001000"}}""";
     @Autowired private MockMvc mvc;
+    @Autowired private OrderRepository orderRepository;
 
     @Test
     void createsListsGetsAndTransitionsOwnedOrder() throws Exception {
@@ -33,6 +39,8 @@ class OrdersIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON).content(ORDER))
                 .andExpect(status().isCreated()).andExpect(header().string("Location", org.hamcrest.Matchers.containsString("/api/orders/")))
                 .andExpect(jsonPath("$.status").value("RECEBIDO"))
+                .andExpect(jsonPath("$.coordinates").doesNotExist())
+                .andExpect(jsonPath("$.geocodingStatus").value("PENDING"))
                 .andExpect(jsonPath("$.totalAmount").value(74.30))
                 .andReturn();
         String id = JsonPath.read(result.getResponse().getContentAsString(), "$.id");
@@ -41,6 +49,11 @@ class OrdersIntegrationTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(id));
         mvc.perform(get("/api/orders/{id}", id).header("Authorization", bearer(token)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].subtotal").value(65.80));
+        persistCoordinates(id);
+        mvc.perform(get("/api/orders/{id}", id).header("Authorization", bearer(token)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.coordinates.latitude").value(-23.5614))
+                .andExpect(jsonPath("$.coordinates.longitude").value(-46.6559))
+                .andExpect(jsonPath("$.geocodingStatus").value("SUCCESS"));
         update(token, id, "EM_PREPARO").andExpect(status().isOk());
         update(token, id, "SAIU_PARA_ENTREGA").andExpect(status().isOk());
         update(token, id, "ENTREGUE").andExpect(status().isOk());
@@ -65,6 +78,8 @@ class OrdersIntegrationTests {
                 .andExpect(status().isCreated()).andReturn();
         String id = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
         mvc.perform(get("/api/orders/{id}", id).header("Authorization", bearer(stranger))).andExpect(status().isNotFound());
+        mvc.perform(post("/api/orders/{id}/geocode", id).header("Authorization", bearer(stranger))).andExpect(status().isNotFound());
+        mvc.perform(post("/api/orders/{id}/geocode", id).header("Authorization", bearer(owner))).andExpect(status().isAccepted());
         mvc.perform(get("/api/orders/{id}", java.util.UUID.randomUUID()).header("Authorization", bearer(owner))).andExpect(status().isNotFound());
         update(owner, id, "ENTREGUE").andExpect(status().isConflict());
         mvc.perform(patch("/api/orders/{id}/status", id).header("Authorization", bearer(owner))
@@ -91,4 +106,11 @@ class OrdersIntegrationTests {
     }
 
     private String bearer(String token) { return "Bearer " + token; }
+
+    private void persistCoordinates(String id) {
+        var order = orderRepository.findById(UUID.fromString(id)).orElseThrow();
+        order.applyGeocoding(GeocodingStatus.SUCCESS,
+                new GeoCoordinates(new BigDecimal("-23.5614"), new BigDecimal("-46.6559")));
+        orderRepository.save(order);
+    }
 }
