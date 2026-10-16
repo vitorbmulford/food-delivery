@@ -1,0 +1,6 @@
+auth:
+  jwt:
+    secret: VGhpc0lzQVN0cm9uZ1Rlc3RTZWNyZXRLZXlGb3JIUzI1Ng==
+    issuer: foody-delivery-test
+    expiration-seconds: 3600
+    allowed-origin: http://localhost:5173

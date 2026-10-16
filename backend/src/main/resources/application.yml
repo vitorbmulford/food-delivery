@@ -1,6 +1,8 @@
 spring:
   application:
     name: foody-delivery-backend
+  config:
+    import: optional:file:.env[.properties]
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/foody_delivery}
     username: ${SPRING_DATASOURCE_USERNAME:foody}
@@ -15,6 +17,12 @@ spring:
     locations: classpath:db/migration
   jackson:
     time-zone: UTC
+auth:
+  jwt:
+    secret: ${JWT_SECRET}
+    issuer: ${JWT_ISSUER:foody-delivery}
+    expiration-seconds: ${JWT_EXPIRATION_SECONDS:3600}
+    allowed-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
 server:
   port: ${SERVER_PORT:8080}
 logging:
