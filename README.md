@@ -84,6 +84,7 @@ Todos os endpoints de pedidos exigem `Authorization: Bearer <token>`. Um pedido 
 - `GET /api/orders?page=0&size=10&status=RECEBIDO`: lista somente os pedidos do usuário, do mais recente ao mais antigo. O tamanho máximo da página é 50.
 - `GET /api/orders/{id}`: consulta um pedido próprio; pedidos de terceiros retornam `404`.
 - `PATCH /api/orders/{id}/status`: atualiza o status de um pedido próprio.
+- `GET /api/orders/{id}/history`: retorna a timeline de status de um pedido próprio, do evento mais antigo ao mais recente.
 
 Exemplo de criação:
 
@@ -114,7 +115,20 @@ Itens exigem nome, quantidade maior que zero e preço unitário maior que zero; 
 
 Transições inválidas e conflitos de atualização concorrente retornam `409 Conflict`; status ausente ou inválido retornam `400 Bad Request`. Para demonstrar o fluxo do MVP, o próprio cliente pode avançar o status. Em produção, esse endpoint deve ser limitado a restaurante, operação ou logística autorizados.
 
-O schema é criado pelas migrations Flyway `V2__create_orders.sql` e `V3__add_order_geocoding.sql`, incluindo itens, endereço incorporado, índices de consulta, versão para optimistic locking e campos de geocodificação. O Swagger documenta os endpoints em `/swagger-ui/index.html` e permite executá-los após informar o JWT em **Authorize**.
+O schema é criado pelas migrations Flyway `V2__create_orders.sql`, `V3__add_order_geocoding.sql` e `V4__create_order_status_history.sql`, incluindo itens, endereço incorporado, índices de consulta, versão para optimistic locking e campos de geocodificação. O Swagger documenta os endpoints em `/swagger-ui/index.html` e permite executá-los após informar o JWT em **Authorize**.
+
+### Histórico de status
+
+Cada pedido criado após a migration V4 ganha, na mesma transação, um evento inicial imutável: `previousStatus: null` e `newStatus: RECEBIDO`. Cada transição aprovada pela máquina de estados adiciona um evento com o estado anterior, o novo estado, instante UTC e o UUID do usuário autenticado. A consulta é somente leitura, ordenada por `changedAt` e, em caso de empate, por `id`.
+
+```json
+[
+  { "previousStatus": null, "newStatus": "RECEBIDO", "changedAt": "2026-10-16T19:30:00Z", "changedBy": "<user-uuid>" },
+  { "previousStatus": "RECEBIDO", "newStatus": "EM_PREPARO", "changedAt": "2026-10-16T19:40:00Z", "changedBy": "<user-uuid>" }
+]
+```
+
+O pedido e seu evento são persistidos atomicamente; uma transição inválida, acesso negado, falha de persistência ou conflito de optimistic locking faz rollback de ambos. Atualizações de geocodificação não são mudanças de status e não criam eventos. A V4 deliberadamente não cria eventos para pedidos anteriores: sem eventos originais, uma linha de baseline poderia parecer uma transição histórica comprovada. Para testar a timeline, crie um pedido, avance um status e execute `GET /api/orders/{id}/history` com o mesmo Bearer token.
 
 ## Geocodificação
 
@@ -140,4 +154,4 @@ A fila e o guard de duplicidade são somente em memória: tentativas em espera o
 
 ## Fora do escopo
 
-Histórico de status, atualizações por WebSocket, mapas, rastreamento GPS, rotas, cálculo de distância/frete, catálogo, estoque, pagamentos e frontend React continuam fora do escopo.
+Atualizações por WebSocket, mapas, rastreamento GPS, rotas, cálculo de distância/frete, catálogo, estoque, pagamentos e frontend React continuam fora do escopo.

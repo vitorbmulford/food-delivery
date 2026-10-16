@@ -2,17 +2,21 @@ package com.foody.backend.orders.api;
 
 import com.foody.backend.orders.api.dto.CreateOrderRequest;
 import com.foody.backend.orders.api.dto.OrderResponse;
+import com.foody.backend.orders.api.dto.OrderStatusHistoryResponse;
 import com.foody.backend.orders.api.dto.UpdateOrderStatusRequest;
 import com.foody.backend.orders.application.OrderService;
 import com.foody.backend.orders.domain.OrderStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -64,6 +68,18 @@ public class OrderController {
     @ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
     public OrderResponse get(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         return orders.get(customerId(jwt), id);
+    }
+
+    @GetMapping("/{id}/history")
+    @Operation(summary = "Get an order status history", description = "Returns the authenticated customer's status timeline in chronological order. `previousStatus` is null only for the initial RECEBIDO event, meaning that the order had no prior status.")
+    @ApiResponse(responseCode = "200", description = "Chronologically ordered status history", content = @Content(examples = @ExampleObject(value = """
+            [{"id":"1f73b52f-ec45-4c29-bf16-93ee0a84189e","previousStatus":null,"newStatus":"RECEBIDO","changedAt":"2026-10-16T19:30:00Z","changedBy":"7a5f6462-dd57-4fef-aed2-8825b85cef0b"},
+             {"id":"8b8d2c70-1e24-4e95-9026-39f535fd7cd6","previousStatus":"RECEBIDO","newStatus":"EM_PREPARO","changedAt":"2026-10-16T19:40:00Z","changedBy":"7a5f6462-dd57-4fef-aed2-8825b85cef0b"}]
+            """)))
+    @ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
+    @ApiResponse(responseCode = "404", description = "Order not found")
+    public List<OrderStatusHistoryResponse> history(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return orders.history(customerId(jwt), id);
     }
 
     @PatchMapping("/{id}/status")
