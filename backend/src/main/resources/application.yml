@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: foody-delivery-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/foody_delivery}
+    username: ${SPRING_DATASOURCE_USERNAME:foody}
+    password: ${SPRING_DATASOURCE_PASSWORD:foody_local}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    time-zone: UTC
+server:
+  port: ${SERVER_PORT:8080}
+logging:
+  level:
+    root: INFO
+    com.foody: INFO
