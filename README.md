@@ -76,6 +76,46 @@ No diretório `backend/`:
 
 O comando executa testes, gera JaCoCo e roda SpotBugs. Testes de integração usam PostgreSQL em Testcontainers e exigem Docker.
 
-## Planejado
+## Pedidos
 
-Pedidos, itens, endereços, histórico de status, atualizações por WebSocket, geocodificação e frontend React ainda não foram implementados.
+Todos os endpoints de pedidos exigem `Authorization: Bearer <token>`. Um pedido é sempre associado ao usuário presente no JWT; não é aceito `customerId` no payload. Por enquanto, cada usuário visualiza e altera apenas os próprios pedidos.
+
+- `POST /api/orders`: cria um pedido e retorna `201 Created` com o header `Location`.
+- `GET /api/orders?page=0&size=10&status=RECEBIDO`: lista somente os pedidos do usuário, do mais recente ao mais antigo. O tamanho máximo da página é 50.
+- `GET /api/orders/{id}`: consulta um pedido próprio; pedidos de terceiros retornam `404`.
+- `PATCH /api/orders/{id}/status`: atualiza o status de um pedido próprio.
+
+Exemplo de criação:
+
+```json
+{
+  "items": [
+    { "productName": "Hambúrguer Artesanal", "quantity": 2, "unitPrice": 32.90 },
+    { "productName": "Refrigerante", "quantity": 1, "unitPrice": 8.50 }
+  ],
+  "deliveryAddress": {
+    "street": "Rua das Flores", "number": "120", "complement": "Apto 42",
+    "neighborhood": "Centro", "city": "São Paulo", "state": "SP", "postalCode": "01001000"
+  }
+}
+```
+
+Itens exigem nome, quantidade maior que zero e preço unitário maior que zero; o endereço exige rua, número, bairro, cidade, UF de duas letras e CEP. Os valores monetários são calculados exclusivamente no backend com `BigDecimal`, arredondamento `HALF_UP` e duas casas decimais. O status inicial é sempre `RECEBIDO`.
+
+### Máquina de estados
+
+| Status atual | Próximos status permitidos |
+| --- | --- |
+| `RECEBIDO` | `EM_PREPARO`, `CANCELADO` |
+| `EM_PREPARO` | `SAIU_PARA_ENTREGA`, `CANCELADO` |
+| `SAIU_PARA_ENTREGA` | `ENTREGUE` |
+| `ENTREGUE` | nenhum |
+| `CANCELADO` | nenhum |
+
+Transições inválidas e conflitos de atualização concorrente retornam `409 Conflict`; status ausente ou inválido retornam `400 Bad Request`. Para demonstrar o fluxo do MVP, o próprio cliente pode avançar o status. Em produção, esse endpoint deve ser limitado a restaurante, operação ou logística autorizados.
+
+O schema é criado pela migration Flyway `V2__create_orders.sql`, incluindo itens, endereço incorporado, índices de consulta e versão para optimistic locking. O Swagger documenta os endpoints em `/swagger-ui/index.html` e permite executá-los após informar o JWT em **Authorize**.
+
+## Fora do escopo
+
+Histórico de status, atualizações por WebSocket, geocodificação, catálogo, estoque, pagamentos e frontend React continuam fora do escopo.

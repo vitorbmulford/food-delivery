@@ -4,3 +4,6 @@ auth:
     issuer: foody-delivery-test
     expiration-seconds: 3600
     allowed-origin: http://localhost:5173
+spring:
+  jpa:
+    open-in-view: false
