@@ -9,11 +9,14 @@ import com.foody.backend.orders.api.dto.GeoCoordinatesResponse;
 import com.foody.backend.orders.api.dto.OrderCustomerResponse;
 import com.foody.backend.orders.api.dto.OrderItemResponse;
 import com.foody.backend.orders.api.dto.OrderResponse;
+import com.foody.backend.orders.api.dto.OrderStatusHistoryResponse;
 import com.foody.backend.orders.domain.DeliveryAddress;
 import com.foody.backend.orders.domain.Order;
 import com.foody.backend.orders.domain.OrderItem;
 import com.foody.backend.orders.domain.OrderStatus;
+import com.foody.backend.orders.domain.OrderStatusHistory;
 import com.foody.backend.orders.infrastructure.persistence.OrderRepository;
+import com.foody.backend.orders.infrastructure.persistence.OrderStatusHistoryRepository;
 import com.foody.backend.geocoding.application.GeocodingDispatcher;
 import com.foody.backend.geocoding.application.OrderGeocodingRequestedEvent;
 import java.time.Instant;
@@ -32,12 +35,14 @@ public class OrderService {
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 50;
     private final OrderRepository orders;
+    private final OrderStatusHistoryRepository statusHistory;
     private final UserRepository users;
     private final ApplicationEventPublisher events;
     private final GeocodingDispatcher geocoding;
 
-    public OrderService(OrderRepository orders, UserRepository users, ApplicationEventPublisher events, GeocodingDispatcher geocoding) {
+    public OrderService(OrderRepository orders, OrderStatusHistoryRepository statusHistory, UserRepository users, ApplicationEventPublisher events, GeocodingDispatcher geocoding) {
         this.orders = orders;
+        this.statusHistory = statusHistory;
         this.users = users;
         this.events = events;
         this.geocoding = geocoding;
@@ -52,7 +57,9 @@ public class OrderService {
         List<OrderItem> items = request.items().stream()
                 .map(item -> new OrderItem(item.productName(), item.quantity(), item.unitPrice()))
                 .toList();
-        Order order = orders.save(new Order(customer, address, items, Instant.now()));
+        Instant now = Instant.now();
+        Order order = orders.save(new Order(customer, address, items, now));
+        statusHistory.save(new OrderStatusHistory(order, null, OrderStatus.RECEBIDO, now, customer));
         events.publishEvent(new OrderGeocodingRequestedEvent(order.getId()));
         return toResponse(order);
     }
@@ -74,8 +81,19 @@ public class OrderService {
     @Transactional
     public OrderResponse updateStatus(UUID customerId, UUID id, OrderStatus status) {
         Order order = findOwned(id, customerId);
-        order.transitionTo(status, Instant.now());
+        OrderStatus previousStatus = order.getStatus();
+        Instant now = Instant.now();
+        order.transitionTo(status, now);
+        statusHistory.save(new OrderStatusHistory(order, previousStatus, status, now, order.getCustomer()));
         return toResponse(order);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderStatusHistoryResponse> history(UUID customerId, UUID id) {
+        findOwned(id, customerId);
+        return statusHistory.findByOrderIdOrderByChangedAtAscIdAsc(id).stream()
+                .map(this::toHistoryResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -99,5 +117,10 @@ public class OrderService {
                 order.getTotalAmount(), order.getCreatedAt(), order.getUpdatedAt(),
                 order.getCoordinates() == null ? null : new GeoCoordinatesResponse(order.getCoordinates().latitude(), order.getCoordinates().longitude()),
                 order.getGeocodingStatus());
+    }
+
+    private OrderStatusHistoryResponse toHistoryResponse(OrderStatusHistory event) {
+        return new OrderStatusHistoryResponse(event.getId(), event.getPreviousStatus(), event.getNewStatus(),
+                event.getChangedAt(), event.getChangedBy() == null ? null : event.getChangedBy().getId());
     }
 }

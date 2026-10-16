@@ -90,6 +90,45 @@ class OrdersIntegrationTests {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void persistsAndProtectsChronologicalStatusHistory() throws Exception {
+        String owner = tokenFor("history-owner@example.com");
+        String stranger = tokenFor("history-stranger@example.com");
+        MvcResult created = mvc.perform(post("/api/orders").header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON).content(ORDER))
+                .andExpect(status().isCreated()).andReturn();
+        String id = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+
+        mvc.perform(get("/api/orders/{id}/history", id).header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].previousStatus").doesNotExist())
+                .andExpect(jsonPath("$[0].newStatus").value("RECEBIDO"))
+                .andExpect(jsonPath("$[0].changedBy").isNotEmpty());
+
+        update(owner, id, "ENTREGUE").andExpect(status().isConflict());
+        mvc.perform(get("/api/orders/{id}/history", id).header("Authorization", bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+
+        update(owner, id, "EM_PREPARO").andExpect(status().isOk());
+        update(owner, id, "SAIU_PARA_ENTREGA").andExpect(status().isOk());
+        update(owner, id, "ENTREGUE").andExpect(status().isOk());
+        mvc.perform(get("/api/orders/{id}/history", id).header("Authorization", bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(4))
+                .andExpect(jsonPath("$[0].newStatus").value("RECEBIDO"))
+                .andExpect(jsonPath("$[1].previousStatus").value("RECEBIDO"))
+                .andExpect(jsonPath("$[1].newStatus").value("EM_PREPARO"))
+                .andExpect(jsonPath("$[2].newStatus").value("SAIU_PARA_ENTREGA"))
+                .andExpect(jsonPath("$[3].newStatus").value("ENTREGUE"));
+
+        mvc.perform(get("/api/orders/{id}/history", id).header("Authorization", bearer(stranger)))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/orders/{id}/history", id)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/orders/{id}/history", UUID.randomUUID()).header("Authorization", bearer(owner)))
+                .andExpect(status().isNotFound());
+    }
+
     private org.springframework.test.web.servlet.ResultActions update(String token, String id, String state) throws Exception {
         return mvc.perform(patch("/api/orders/{id}/status", id).header("Authorization", bearer(token))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"" + state + "\"}"));
