@@ -1,0 +1,82 @@
+package com.foody.backend.orders.application;
+
+import com.foody.backend.auth.domain.User;
+import com.foody.backend.auth.infrastructure.persistence.UserRepository;
+import com.foody.backend.orders.api.dto.CreateOrderItemRequest;
+import com.foody.backend.orders.api.dto.CreateOrderRequest;
+import com.foody.backend.orders.api.dto.DeliveryAddressResponse;
+import com.foody.backend.orders.api.dto.OrderCustomerResponse;
+import com.foody.backend.orders.api.dto.OrderItemResponse;
+import com.foody.backend.orders.api.dto.OrderResponse;
+import com.foody.backend.orders.domain.DeliveryAddress;
+import com.foody.backend.orders.domain.Order;
+import com.foody.backend.orders.domain.OrderItem;
+import com.foody.backend.orders.domain.OrderStatus;
+import com.foody.backend.orders.infrastructure.persistence.OrderRepository;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class OrderService {
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 50;
+    private final OrderRepository orders;
+    private final UserRepository users;
+
+    public OrderService(OrderRepository orders, UserRepository users) {
+        this.orders = orders;
+        this.users = users;
+    }
+
+    @Transactional
+    public OrderResponse create(UUID customerId, CreateOrderRequest request) {
+        User customer = users.findById(customerId).orElseThrow(OrderNotFoundException::new);
+        DeliveryAddress address = new DeliveryAddress(request.deliveryAddress().street(), request.deliveryAddress().number(),
+                request.deliveryAddress().complement(), request.deliveryAddress().neighborhood(), request.deliveryAddress().city(),
+                request.deliveryAddress().state().toUpperCase(java.util.Locale.ROOT), request.deliveryAddress().postalCode());
+        List<OrderItem> items = request.items().stream()
+                .map(item -> new OrderItem(item.productName(), item.quantity(), item.unitPrice()))
+                .toList();
+        return toResponse(orders.save(new Order(customer, address, items, Instant.now())));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<OrderResponse> list(UUID customerId, OrderStatus status, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE),
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Order> result = status == null ? orders.findByCustomerId(customerId, pageable)
+                : orders.findByCustomerIdAndStatus(customerId, status, pageable);
+        return result.map(this::toResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public OrderResponse get(UUID customerId, UUID id) {
+        return toResponse(findOwned(id, customerId));
+    }
+
+    @Transactional
+    public OrderResponse updateStatus(UUID customerId, UUID id, OrderStatus status) {
+        Order order = findOwned(id, customerId);
+        order.transitionTo(status, Instant.now());
+        return toResponse(order);
+    }
+
+    private Order findOwned(UUID id, UUID customerId) {
+        return orders.findByIdAndCustomerId(id, customerId).orElseThrow(OrderNotFoundException::new);
+    }
+
+    private OrderResponse toResponse(Order order) {
+        DeliveryAddress address = order.getDeliveryAddress();
+        return new OrderResponse(order.getId(), new OrderCustomerResponse(order.getCustomer().getId(), order.getCustomer().getName(), order.getCustomer().getEmail()),
+                order.getStatus(), order.getItems().stream().map(item -> new OrderItemResponse(item.getId(), item.getProductName(), item.getQuantity(), item.getUnitPrice(), item.getSubtotal())).toList(),
+                new DeliveryAddressResponse(address.getStreet(), address.getNumber(), address.getComplement(), address.getNeighborhood(), address.getCity(), address.getState(), address.getPostalCode()),
+                order.getTotalAmount(), order.getCreatedAt(), order.getUpdatedAt());
+    }
+}

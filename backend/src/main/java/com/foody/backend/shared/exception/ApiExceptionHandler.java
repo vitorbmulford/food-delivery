@@ -1,10 +1,13 @@
 package com.foody.backend.shared.exception;
 
 import com.foody.backend.auth.application.EmailAlreadyRegisteredException;
+import com.foody.backend.orders.application.OrderNotFoundException;
+import com.foody.backend.orders.domain.InvalidOrderStatusTransitionException;
 import java.time.Instant;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -29,5 +32,15 @@ public class ApiExceptionHandler {
     @ExceptionHandler({BadCredentialsException.class, AuthenticationCredentialsNotFoundException.class})
     ProblemDetail invalidCredentials() {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+    }
+
+    @ExceptionHandler(OrderNotFoundException.class)
+    ProblemDetail orderNotFound() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Order not found");
+    }
+
+    @ExceptionHandler({InvalidOrderStatusTransitionException.class, ObjectOptimisticLockingFailureException.class})
+    ProblemDetail conflictingOrderUpdate(RuntimeException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
     }
 }
