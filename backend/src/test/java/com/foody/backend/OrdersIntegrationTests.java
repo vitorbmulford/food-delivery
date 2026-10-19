@@ -190,6 +190,44 @@ class OrdersIntegrationTests {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void insightsAggregatesValuesItemsProductsDurationsAndScopesOwner() throws Exception {
+        String owner = tokenFor("insights-owner@example.com");
+        String stranger = tokenFor("insights-stranger@example.com");
+        String deliveredId = createOrder(owner);
+        String cancelledId = createOrder(owner);
+        createOrder(owner);
+        update(owner, deliveredId, "EM_PREPARO").andExpect(status().isOk());
+        update(owner, deliveredId, "SAIU_PARA_ENTREGA").andExpect(status().isOk());
+        update(owner, deliveredId, "ENTREGUE").andExpect(status().isOk());
+        update(owner, cancelledId, "CANCELADO").andExpect(status().isOk());
+        String today = LocalDate.now(ZoneId.of("America/Sao_Paulo")).toString();
+
+        mvc.perform(get("/api/insights").header("Authorization", bearer(owner)).param("from", today).param("to", today))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.current.createdCount").value(3))
+                .andExpect(jsonPath("$.current.createdValue").value(222.90))
+                .andExpect(jsonPath("$.current.deliveredCount").value(1))
+                .andExpect(jsonPath("$.current.deliveredValue").value(74.30))
+                .andExpect(jsonPath("$.current.averageDeliveredTicket").value(74.30))
+                .andExpect(jsonPath("$.current.itemsSold").value(3))
+                .andExpect(jsonPath("$.current.cancelledCount").value(1))
+                .andExpect(jsonPath("$.current.cancelledValue").value(74.30))
+                .andExpect(jsonPath("$.daily.length()").value(1))
+                .andExpect(jsonPath("$.daily[0].createdCount").value(3))
+                .andExpect(jsonPath("$.products.length()").value(2))
+                .andExpect(jsonPath("$.products[0].quantity").value(2))
+                .andExpect(jsonPath("$.performance.totalCount").value(1))
+                .andExpect(jsonPath("$.performance.preparationCount").value(1))
+                .andExpect(jsonPath("$.currentStatusValues.length()").value(3));
+        mvc.perform(get("/api/insights").header("Authorization", bearer(stranger)).param("from", today).param("to", today))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.current.createdCount").value(0))
+                .andExpect(jsonPath("$.products.length()").value(0));
+        mvc.perform(get("/api/insights").param("from", today).param("to", today)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/insights").header("Authorization", bearer(owner)).param("from", today).param("to", LocalDate.now(ZoneId.of("America/Sao_Paulo")).plusDays(1).toString()))
+                .andExpect(status().isBadRequest());
+    }
+
     private String createOrder(String token) throws Exception {
         MvcResult result = mvc.perform(post("/api/orders").header("Authorization", bearer(token))
                         .contentType(MediaType.APPLICATION_JSON).content(ORDER))

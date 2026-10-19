@@ -274,6 +274,7 @@ export function OrdersList(props: Props) {
                       <Typography
                         component={Link}
                         to={`/orders/${order.id}`}
+                        title={order.id}
                         sx={{ fontWeight: 700 }}
                       >
                         {order.id.slice(0, 8)}

@@ -11,6 +11,7 @@ import {
   updateOrderStatus,
 } from '../api/ordersApi'
 import type { CreateOrderInput, OrderFilters, OrderStatus } from '../types/order'
+import { insightsKeys } from '../../insights/useInsights'
 
 export const orderKeys = {
   all: ['orders'] as const,
@@ -84,6 +85,7 @@ export function useSetManualOrderLocation() {
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: orderKeys.dashboards() }),
+        queryClient.invalidateQueries({ queryKey: insightsKeys.all }),
       ])
     },
   })
@@ -98,6 +100,7 @@ export function useCreateOrder() {
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: orderKeys.dashboards() }),
+        queryClient.invalidateQueries({ queryKey: insightsKeys.all }),
       ])
     },
   })
@@ -114,6 +117,7 @@ export function useUpdateOrderStatus() {
         queryClient.invalidateQueries({ queryKey: orderKeys.history(order.id) }),
         queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: orderKeys.dashboards() }),
+        queryClient.invalidateQueries({ queryKey: insightsKeys.all }),
       ])
     },
     onError: async (error, variables) => {

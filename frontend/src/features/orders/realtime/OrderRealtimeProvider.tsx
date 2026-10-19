@@ -6,9 +6,11 @@ import { refreshSession } from '../../auth/api/authApi'
 import { getAccessToken, notifySessionExpired, setAccessToken } from '../../auth/session'
 import { apiClient } from '../../../lib/api/client'
 import { orderKeys } from '../hooks/useOrders'
+import { insightsKeys } from '../../insights/useInsights'
 import { orderStatuses, type OrderStatus } from '../types/order'
 import { orderRealtimeStatusContext } from './useOrderRealtimeStatus'
 import type { RealtimeStatus } from './realtimeTypes'
+import { DEMO_MODE } from '../../demo/demoData'
 
 type OrderStatusChangedEvent = {
   eventType: 'ORDER_STATUS_CHANGED'
@@ -69,6 +71,7 @@ export function OrderRealtimeProvider({ children }: PropsWithChildren) {
         queryClient.invalidateQueries({ queryKey: orderKeys.dashboards() }),
         queryClient.invalidateQueries({ queryKey: orderKeys.detail(event.orderId), exact: true }),
         queryClient.invalidateQueries({ queryKey: orderKeys.history(event.orderId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: insightsKeys.all }),
       ])
     },
     [queryClient],
@@ -76,7 +79,7 @@ export function OrderRealtimeProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     const generation = ++generationRef.current
-    if (!isAuthenticated) return
+    if (!isAuthenticated || DEMO_MODE) return
 
     let stopped = false
     let retryTimer: ReturnType<typeof setTimeout> | undefined
@@ -191,7 +194,7 @@ export function OrderRealtimeProvider({ children }: PropsWithChildren) {
     }
   }, [handleMessage, isAuthenticated])
 
-  const visibleStatus = isAuthenticated ? status : 'disconnected'
+  const visibleStatus = isAuthenticated && !DEMO_MODE ? status : 'disconnected'
   return (
     <orderRealtimeStatusContext.Provider value={visibleStatus}>
       {children}

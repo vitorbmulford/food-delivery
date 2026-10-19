@@ -22,9 +22,10 @@ O Vite inicia o frontend em `http://localhost:5173` e encaminha `/api` e `/ws` a
 
 ## Variáveis de ambiente
 
-| Variável            | Descrição                                                        | Padrão local |
-| ------------------- | ---------------------------------------------------------------- | ------------ |
-| `VITE_API_BASE_URL` | URL base pública da API Spring Boot; vazia usa proxy same-origin | vazio        |
+| Variável            | Descrição                                                          | Padrão local |
+| ------------------- | ------------------------------------------------------------------ | ------------ |
+| `VITE_API_BASE_URL` | URL base pública da API Spring Boot; vazia usa proxy same-origin   | vazio        |
+| `VITE_DEMO_MODE`    | Usa pedidos e indicadores sintéticos no frontend, sem chamar a API | `false`      |
 
 As variáveis prefixadas com `VITE_` são incorporadas ao bundle e devem conter apenas valores públicos. Não coloque segredos no frontend. O exemplo de ambiente da raiz permanece dedicado ao Docker Compose.
 
@@ -35,6 +36,13 @@ No desenvolvimento local, o backend precisa permitir `FRONTEND_ORIGIN=http://loc
 Na raiz do repositório, configure `JWT_SECRET` no `.env` (copie `.env.example` e substitua o marcador) e execute `docker compose up --build -d`. A aplicação estará em `http://localhost:3000`; o Nginx encaminha `/api` e `/ws` ao Spring Boot e usa `index.html` como fallback das rotas SPA. Em produção com HTTPS, use `AUTH_COOKIE_SECURE=true`.
 
 ## Autenticação
+
+### Modo demonstração
+
+Para visualizar as telas preenchidas sem backend, ajuste `VITE_DEMO_MODE=true` no `frontend/.env` e reinicie o Vite. Entre com qualquer e-mail e senha; o modo demo autentica um usuário de demonstração e gera 96 pedidos distribuídos nos últimos 90 dias. Dashboard, Pedidos, detalhes, histórico e Insights compartilham os mesmos dados em memória. A criação e a mudança de status funcionam durante a sessão, mas os dados reiniciam ao recarregar a página. Um aviso no layout identifica o modo. Para voltar à API real, use `VITE_DEMO_MODE=false` e reinicie o Vite.
+
+- O modo demo não faz chamadas de autenticação, pedidos, Insights nem WebSocket ao backend.
+- Os valores e eventos são inteiramente fictícios para demonstração visual; não representam vendas ou pagamentos reais.
 
 - Cadastro envia `name`, `email` e `password` para `POST /api/auth/register`. O backend retorna `201` com o perfil, sem JWT; após sucesso, a pessoa entra pela tela de login.
 - Login envia `email` e `password` para `POST /api/auth/login`. O backend retorna `accessToken`, `tokenType` e `expiresIn`, e cria uma sessão persistente em cookie `HttpOnly`.
@@ -89,11 +97,22 @@ src/
 - `/login`
 - `/register`
 - `/dashboard`
+- `/insights`
 - `/orders`
 - `/orders/new`
 - `/orders/:id`
 
 Endereços desconhecidos exibem a página de fallback. `/orders` lista pedidos reais com paginação e filtro por status sincronizados à URL. `/orders/new` cria pedidos por formulário validado e `/orders/:id` mostra o pedido consultado na API, itens, endereço, cliente, totais, andamento resumido e histórico real de mudanças. UUIDs inválidos são barrados antes da consulta; pedidos ausentes ou inacessíveis recebem o estado de não encontrado.
+
+## Insights
+
+`/insights` apresenta análise comercial separada do painel operacional `/dashboard`. O período pode ser Hoje, Ontem, últimos 7, 30 ou 90 dias, mês atual, mês anterior ou intervalo personalizado. Datas são interpretadas como dias civis em `America/Sao_Paulo`; a data inicial e final são inclusivas e o backend converte os limites para timestamps no PostgreSQL. Intervalos anteriores têm a mesma quantidade de dias e terminam no dia anterior ao início selecionado.
+
+O endpoint `GET /api/insights?from=AAAA-MM-DD&to=AAAA-MM-DD` retorna valores e contagens de pedidos criados (`created_at`), entregues e cancelados (`order_status_history.changed_at`), valor atual dos pedidos em andamento, ticket médio de pedidos entregues, itens vendidos, atividade diária, produtos, horários e tempos calculáveis. Produtos são agrupados apenas após trim, redução de espaços repetidos e conversão para minúsculas. O ranking considera quantidades de itens de pedidos entregues; a participação é percentual das unidades vendidas.
+
+Os tempos usam pedidos entregues no período e eventos do histórico: criação até primeiro início de preparo; primeiro início até primeira saída para entrega; primeira saída até primeira conclusão; e criação até conclusão. Cada média informa quantos pedidos tinham os eventos necessários e em ordem válida; sem amostra suficiente, a interface explica que os dados são insuficientes. Dias sem evento são retornados com zero. Valores entregues indicam valor de pedidos, não comprovam pagamentos ou recebimentos; não há cálculo de lucro ou despesas. O endpoint usa o JWT atual e escopa todos os dados ao usuário autenticado. As agregações são executadas no PostgreSQL em consultas por categoria, sem carregar pedidos no navegador. TanStack Query mantém cache por intervalo por um minuto e invalida Insights após criação ou mudança de status, inclusive por WebSocket.
+
+O backend valida intervalos inclusivos de até 366 dias, sem datas futuras. Para executar a cobertura de interface, use `npm run test:run`; para validar tipos e produção, `npm run build`.
 
 Os detalhes usam `GET /api/orders/{id}` e o histórico usa `GET /api/orders/{id}/history`. O histórico é exibido em ordem cronológica com status anterior/novo, horário e identificador do responsável quando disponível. A consulta do histórico falha de forma independente: se ela estiver indisponível, os detalhes continuam visíveis e há uma opção para tentar novamente. O indicador de progresso resume o fluxo possível (`RECEBIDO` → `EM_PREPARO` → `SAIU_PARA_ENTREGA` → `ENTREGUE`); pedidos cancelados são mostrados separadamente e eventos realmente ocorridos aparecem somente na timeline.
 

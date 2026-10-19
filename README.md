@@ -233,7 +233,7 @@ O evento só é emitido após o commit da transação que atualiza o pedido e cr
 
 ## Fora do escopo
 
-Mapas, rastreamento GPS, rotas, cálculo de distância/frete, catálogo, estoque, pagamentos e frontend React continuam fora do escopo.
+Rastreamento GPS em tempo real, rotas, cálculo de distância/frete, catálogo, estoque e pagamentos continuam fora do escopo. O frontend React e o mapa do endereço de entrega fazem parte do projeto.
 
 ## Resiliência e observabilidade
 
