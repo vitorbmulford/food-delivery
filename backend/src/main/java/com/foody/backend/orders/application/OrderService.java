@@ -62,10 +62,10 @@ public class OrderService {
                 request.deliveryAddress().complement(), request.deliveryAddress().neighborhood(), request.deliveryAddress().city(),
                 request.deliveryAddress().state().toUpperCase(java.util.Locale.ROOT), request.deliveryAddress().postalCode());
         List<OrderItem> items = request.items().stream()
-                .map(item -> new OrderItem(item.productName(), item.quantity(), item.unitPrice()))
+                .map(item -> OrderItem.create(item.productName(), item.quantity(), item.unitPrice()))
                 .toList();
         Instant now = Instant.now();
-        Order order = orders.save(new Order(customer, address, items, now));
+        Order order = orders.save(Order.create(customer, address, items, now));
         statusHistory.save(new OrderStatusHistory(order, null, OrderStatus.RECEBIDO, now, customer));
         events.publishEvent(new OrderGeocodingRequestedEvent(order.getId()));
         ordersCreated.increment();

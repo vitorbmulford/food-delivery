@@ -91,18 +91,22 @@ public class SecurityConfiguration {
     RateLimitFilter rateLimitFilter(RateLimitProperties properties, MeterRegistry meterRegistry) { return new RateLimitFilter(properties, meterRegistry); }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, RateLimitFilter rateLimitFilter) throws Exception {
-        return http
-                .csrf(csrf -> csrf.disable())
-                .cors(cors -> {})
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(authorize -> authorize
-                        // A identidade da conexão WebSocket é estabelecida pelo frame STOMP CONNECT.
-                        .requestMatchers("/api/auth/register", "/api/auth/login", "/ws/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health/**").permitAll()
-                        .requestMatchers("/api/users/me", "/api/orders/**").authenticated()
-                        .anyRequest().authenticated())
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))
-                .addFilterAfter(rateLimitFilter, BearerTokenAuthenticationFilter.class)
-                .build();
+    SecurityFilterChain securityFilterChain(HttpSecurity http, RateLimitFilter rateLimitFilter) {
+        try {
+            return http
+                    .csrf(csrf -> csrf.disable())
+                    .cors(cors -> {})
+                    .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                    .authorizeHttpRequests(authorize -> authorize
+                            // A identidade da conexão WebSocket é estabelecida pelo frame STOMP CONNECT.
+                            .requestMatchers("/api/auth/register", "/api/auth/login", "/ws/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health/**").permitAll()
+                            .requestMatchers("/api/users/me", "/api/orders/**").authenticated()
+                            .anyRequest().authenticated())
+                    .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))
+                    .addFilterAfter(rateLimitFilter, BearerTokenAuthenticationFilter.class)
+                    .build();
+        } catch (Exception exception) {
+            throw new IllegalStateException("Could not configure HTTP security", exception);
+        }
     }
 }

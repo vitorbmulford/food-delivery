@@ -15,6 +15,7 @@ import java.util.UUID;
 @Table(name = "order_items")
 public class OrderItem {
     private static final int MONEY_SCALE = 2;
+    static final BigDecimal MAX_PERSISTED_AMOUNT = new BigDecimal("99999999999999999.99");
 
     @Id
     private UUID id;
@@ -32,12 +33,21 @@ public class OrderItem {
 
     protected OrderItem() { }
 
-    public OrderItem(String productName, Integer quantity, BigDecimal unitPrice) {
+    public static OrderItem create(String productName, Integer quantity, BigDecimal unitPrice) {
+        BigDecimal persistedUnitPrice = money(unitPrice);
+        BigDecimal persistedSubtotal = money(persistedUnitPrice.multiply(BigDecimal.valueOf(quantity)));
+        if (persistedUnitPrice.compareTo(MAX_PERSISTED_AMOUNT) > 0 || persistedSubtotal.compareTo(MAX_PERSISTED_AMOUNT) > 0) {
+            throw new OrderValueOutOfRangeException();
+        }
+        return new OrderItem(productName, quantity, persistedUnitPrice, persistedSubtotal);
+    }
+
+    private OrderItem(String productName, Integer quantity, BigDecimal unitPrice, BigDecimal subtotal) {
         this.id = UUID.randomUUID();
         this.productName = productName;
         this.quantity = quantity;
-        this.unitPrice = money(unitPrice);
-        this.subtotal = money(this.unitPrice.multiply(BigDecimal.valueOf(quantity)));
+        this.unitPrice = unitPrice;
+        this.subtotal = subtotal;
     }
 
     void attachTo(Order order) { this.order = order; }

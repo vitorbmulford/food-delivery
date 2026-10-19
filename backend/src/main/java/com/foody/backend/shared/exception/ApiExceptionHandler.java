@@ -3,6 +3,7 @@ package com.foody.backend.shared.exception;
 import com.foody.backend.auth.application.EmailAlreadyRegisteredException;
 import com.foody.backend.orders.application.OrderNotFoundException;
 import com.foody.backend.orders.domain.InvalidOrderStatusTransitionException;
+import com.foody.backend.orders.domain.OrderValueOutOfRangeException;
 import java.time.Instant;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -37,6 +38,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(OrderNotFoundException.class)
     ProblemDetail orderNotFound() {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Order not found");
+    }
+
+    @ExceptionHandler(OrderValueOutOfRangeException.class)
+    ProblemDetail orderValueOutOfRange() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Order amount exceeds the maximum supported value");
     }
 
     @ExceptionHandler({InvalidOrderStatusTransitionException.class, ObjectOptimisticLockingFailureException.class})

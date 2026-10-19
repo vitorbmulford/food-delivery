@@ -60,7 +60,15 @@ public class Order {
 
     protected Order() { }
 
-    public Order(User customer, DeliveryAddress deliveryAddress, List<OrderItem> items, Instant now) {
+    public static Order create(User customer, DeliveryAddress deliveryAddress, List<OrderItem> items, Instant now) {
+        BigDecimal totalAmount = money(items.stream().map(OrderItem::getSubtotal).reduce(BigDecimal.ZERO, BigDecimal::add));
+        if (totalAmount.compareTo(OrderItem.MAX_PERSISTED_AMOUNT) > 0) {
+            throw new OrderValueOutOfRangeException();
+        }
+        return new Order(customer, deliveryAddress, items, now, totalAmount);
+    }
+
+    private Order(User customer, DeliveryAddress deliveryAddress, List<OrderItem> items, Instant now, BigDecimal totalAmount) {
         this.id = UUID.randomUUID();
         this.customer = customer;
         this.status = OrderStatus.RECEBIDO;
@@ -69,7 +77,7 @@ public class Order {
             item.attachTo(this);
             this.items.add(item);
         });
-        this.totalAmount = money(this.items.stream().map(OrderItem::getSubtotal).reduce(BigDecimal.ZERO, BigDecimal::add));
+        this.totalAmount = totalAmount;
         this.createdAt = now;
         this.updatedAt = now;
         this.geocodingStatus = GeocodingStatus.PENDING;

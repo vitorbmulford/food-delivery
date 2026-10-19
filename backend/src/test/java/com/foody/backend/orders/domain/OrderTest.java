@@ -46,9 +46,24 @@ class OrderTest {
                 () -> order.transitionTo(OrderStatus.RECEBIDO, now));
     }
 
+    @Test
+    void rejectsAmountsThatCannotFitDatabasePrecisionAfterRounding() {
+        assertEquals(new BigDecimal("99999999999999999.99"),
+                OrderItem.create("Burger", 1, new BigDecimal("99999999999999999.994")).getSubtotal());
+        assertThrows(OrderValueOutOfRangeException.class,
+                () -> OrderItem.create("Burger", 1, new BigDecimal("99999999999999999.995")));
+        assertThrows(OrderValueOutOfRangeException.class,
+                () -> OrderItem.create("Burger", 2, new BigDecimal("60000000000000000.00")));
+        User customer = new User(UUID.randomUUID(), "Customer", "customer@example.com", "hash", now);
+        assertThrows(OrderValueOutOfRangeException.class, () -> Order.create(customer,
+                new DeliveryAddress("Street", "1", null, "Center", "City", "SP", "01001000"),
+                List.of(OrderItem.create("Burger", 1, new BigDecimal("60000000000000000.00")),
+                        OrderItem.create("Soda", 1, new BigDecimal("60000000000000000.00"))), now));
+    }
+
     private Order order() {
         User customer = new User(UUID.randomUUID(), "Customer", "customer@example.com", "hash", now);
-        return new Order(customer, new DeliveryAddress("Street", "1", null, "Center", "City", "SP", "01001000"),
-                List.of(new OrderItem("Burger", 2, new BigDecimal("32.90")), new OrderItem("Soda", 1, new BigDecimal("8.50"))), now);
+        return Order.create(customer, new DeliveryAddress("Street", "1", null, "Center", "City", "SP", "01001000"),
+                List.of(OrderItem.create("Burger", 2, new BigDecimal("32.90")), OrderItem.create("Soda", 1, new BigDecimal("8.50"))), now);
     }
 }
