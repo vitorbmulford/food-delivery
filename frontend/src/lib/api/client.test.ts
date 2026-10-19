@@ -21,6 +21,20 @@ describe('apiClient autenticação', () => {
     expect(authorization).toBe('Bearer jwt-example')
   })
 
+  it('usa o cookie sem enviar um access token expirado ao renovar a sessão', async () => {
+    setAccessToken('expired-jwt')
+    let authorization: unknown
+    let withCredentials: boolean | undefined
+    const adapter: AxiosAdapter = async (config) => {
+      authorization = config.headers.Authorization
+      withCredentials = config.withCredentials
+      return { data: {}, status: 200, statusText: 'OK', headers: {}, config }
+    }
+    await apiClient.post('/api/auth/refresh', undefined, { adapter })
+    expect(authorization).toBeUndefined()
+    expect(withCredentials).toBe(true)
+  })
+
   it('notifica a aplicação quando uma chamada privada recebe 401', async () => {
     setAccessToken('expired-jwt')
     vi.spyOn(axios, 'post').mockRejectedValue(new Error('Session expired'))

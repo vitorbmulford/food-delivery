@@ -116,7 +116,7 @@ export function DeliveryAddressFields({ form }: Props) {
         label="Rua"
         autoComplete="address-line1"
         slotProps={{
-          htmlInput: { maxLength: 160, pattern: "[\\p{L}\\p{N}\\s.'’ºª°&()+/,-]*" },
+          htmlInput: { maxLength: 160, pattern: "[\\p{L}\\p{N}\\s.'’ºª°&\\(\\)+\\/,\\-]*" },
           inputLabel: { shrink: Boolean(street) },
           formHelperText: {
             sx:
@@ -155,7 +155,7 @@ export function DeliveryAddressFields({ form }: Props) {
       <TextField
         label="Complemento (opcional)"
         slotProps={{
-          htmlInput: { maxLength: 120, pattern: "[\\p{L}\\p{N}\\s.'’ºª°#&()+/,-]*" },
+          htmlInput: { maxLength: 120, pattern: "[\\p{L}\\p{N}\\s.'’ºª°#&\\(\\)+\\/,\\-]*" },
           formHelperText: {
             sx:
               complementLimitWarning && !addressErrors?.complement
@@ -176,7 +176,7 @@ export function DeliveryAddressFields({ form }: Props) {
         label="Bairro"
         autoComplete="address-level3"
         slotProps={{
-          htmlInput: { maxLength: 120, pattern: "[\\p{L}\\p{N}\\s.'’ºª°&()+/,-]*" },
+          htmlInput: { maxLength: 120, pattern: "[\\p{L}\\p{N}\\s.'’ºª°&\\(\\)+\\/,\\-]*" },
           inputLabel: { shrink: Boolean(neighborhood) },
           formHelperText: {
             sx:
@@ -198,7 +198,7 @@ export function DeliveryAddressFields({ form }: Props) {
         label="Cidade"
         autoComplete="address-level2"
         slotProps={{
-          htmlInput: { maxLength: 120, pattern: "[\\p{L}\\p{N}\\s.'’ºª°&()+/,-]*" },
+          htmlInput: { maxLength: 120, pattern: "[\\p{L}\\p{N}\\s.'’ºª°&\\(\\)+\\/,\\-]*" },
           inputLabel: { shrink: Boolean(city) },
           formHelperText: {
             sx: cityLimitWarning && !addressErrors?.city ? { color: 'warning.main' } : undefined,

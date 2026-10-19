@@ -39,6 +39,26 @@ describe('formulário de pedidos', () => {
     vi.unstubAllGlobals()
   })
 
+  it('usa padrões HTML válidos no modo Unicode para produto e endereço', () => {
+    renderForm()
+    const fields = [
+      screen.getByLabelText('Produto'),
+      screen.getByLabelText('Rua'),
+      screen.getByLabelText('Complemento (opcional)'),
+      screen.getByLabelText('Bairro'),
+      screen.getByLabelText('Cidade'),
+    ]
+
+    for (const field of fields) {
+      const pattern = field.getAttribute('pattern')
+      expect(pattern).not.toBeNull()
+      expect(() => new RegExp(pattern ?? '', 'v')).not.toThrow()
+    }
+
+    const productPattern = new RegExp(fields[0]?.getAttribute('pattern') ?? '', 'v')
+    expect(productPattern.test('Pão (combo)/2 - especial')).toBe(true)
+  })
+
   it('valida os campos obrigatórios e exige um item válido', async () => {
     const user = userEvent.setup()
     renderForm()

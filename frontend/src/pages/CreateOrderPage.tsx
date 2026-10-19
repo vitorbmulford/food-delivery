@@ -108,7 +108,7 @@ export function CreateOrderPage() {
                         slotProps={{
                           htmlInput: {
                             maxLength: 160,
-                            pattern: "[\\p{L}\\p{N}][\\p{L}\\p{N}\\s.'’&()+/,-]*",
+                            pattern: "[\\p{L}\\p{N}][\\p{L}\\p{N}\\s.'’&\\(\\)+\\/,\\-]*",
                           },
                         }}
                         {...productRegistration}
