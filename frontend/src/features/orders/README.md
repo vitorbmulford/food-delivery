@@ -1,3 +1,31 @@
 # Pedidos
 
-Este módulo receberá os tipos de domínio, consultas e componentes específicos de pedidos. As telas atuais não consultam a API nem exibem dados de exemplo.
+O módulo consome a API autenticada de pedidos com o cliente Axios compartilhado e as queries/mutations do TanStack Query. As respostas vêm da API; a interface não usa pedidos locais ou fictícios.
+
+## Organização
+
+- `api/`: listagem, consulta, criação e atualização de status.
+- `components/`: listagem desktop/mobile, status e ações permitidas.
+- `hooks/`: query keys e mutations com invalidação do cache.
+- `schemas/`: validação do DTO de criação com Zod.
+- `types/`: contratos de resposta, criação e status.
+- `utils/`: rótulos, formatação BRL/data e mensagens de erro.
+
+## API usada
+
+- `GET /api/orders?page=0&size=10&status=...`: página zero based, tamanho até 50 e status opcional. A ordenação é fixa pelo backend, do mais recente para o mais antigo.
+- `GET /api/orders/{id}`: resumo do pedido.
+- `POST /api/orders`: `items` (`productName`, `quantity`, `unitPrice`) e `deliveryAddress` (`street`, `number`, `complement`, `neighborhood`, `city`, `state`, `postalCode`). A API calcula o total.
+- `PATCH /api/orders/{id}/status`: recebe `{ "status": "..." }`.
+
+Os status aceitos são `RECEBIDO`, `EM_PREPARO`, `SAIU_PARA_ENTREGA`, `ENTREGUE` e `CANCELADO`. Transições: recebido para preparo ou cancelado; preparo para saiu para entrega ou cancelado; saiu para entrega para entregue. Entregue e cancelado são finais. A API responde `409` para transição inválida ou atualização concorrente.
+
+A resposta da listagem contém `content` e o objeto `page`, que agrupa `number`, `size`, `totalElements` e `totalPages`.
+
+Os filtros de status e a página ficam nos parâmetros da URL. O cache das queries privadas é limpo pelo fluxo de logout já existente, inclusive quando a sessão expira.
+
+No formulário de criação, um CEP válido é consultado diretamente no ViaCEP com debounce de 500 ms e timeout de oito segundos. O resultado pode preencher rua, bairro, cidade e UF; esses campos continuam editáveis. Se o serviço falhar ou não encontrar o CEP, o preenchimento manual permanece disponível. O CEP mascarado (`00000-000`) segue no campo `postalCode` já aceito pelo backend. A geocodificação do pedido após a criação continua a cargo do Spring Boot.
+
+## Testes e limites
+
+Execute `npm run test:run` no diretório `frontend/`. Os testes usam mocks locais, sem serviço externo. A validação de integração com um backend ativo depende de API, banco e credenciais de teste disponíveis. O resumo por ID é apresentado como destino de navegação; histórico, mapa e recursos analíticos continuam fora desta etapa.
