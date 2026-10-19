@@ -1,10 +1,36 @@
 # Foody Delivery
 
-O **Foody Delivery** é uma aplicação web para gerenciar e acompanhar pedidos de delivery, desenvolvida com Java, Spring Boot, React e PostgreSQL.
+O **Foody Delivery** é uma aplicação full-stack para gerenciar e acompanhar pedidos de delivery. O backend usa Java 21, Spring Boot e PostgreSQL; a interface é construída com React e TypeScript.
 
-A solução atende ao núcleo do desafio técnico **Mini Rastreador de Pedidos**: cadastro e autenticação, criação de pedidos com cliente, itens e endereço, consulta de pedidos e atualização de status. O cliente do pedido é independente da conta do operador que o registra.
+No frontend, Material UI compõe a interface, React Router organiza a navegação e React Hook Form com Zod valida os formulários. Vite dá suporte ao desenvolvimento e ao build, enquanto TanStack Query gerencia as consultas e a atualização dos dados exibidos.
 
-Além desse fluxo, o projeto inclui recursos complementares de operação e acompanhamento, como notificações em tempo real, geocodificação e mapa, Dashboard, Insights e histórico de status. Essas extensões permitem explorar integrações, rastreabilidade, segurança e resiliência em cenários além do MVP.
+A aplicação atende ao núcleo do desafio técnico **Mini Rastreador de Pedidos**: cadastro e autenticação, criação de pedidos com cliente, itens e endereço, consulta e atualização de status. O cliente do pedido é independente da conta do operador que o registra. Também inclui recursos complementares, como notificações em tempo real, geocodificação e mapa, Dashboard, Insights e histórico de status.
+
+## Demonstrações
+
+Os vídeos mostram primeiro a aplicação integrada em funcionamento real, integração, persistência de dados. Em seguida, a demonstração com dados simulados apresenta como Dashboard e Insights se comportam com um volume maior de pedidos. Esses dados foram criados para ilustrar os recursos analíticos; não são registros persistidos no backend.
+
+### Aplicação integrada — funcionamento real
+
+<video controls preload="metadata" width="100%">
+  <source src="./docs/demo/video_real.mp4" type="video/mp4">
+  <source src="https://raw.githubusercontent.com/vitorbmulford/food-delivery/master/docs/demo/video_real.mp4" type="video/mp4">
+  Seu navegador não oferece reprodução de vídeo. [Abra o vídeo](docs/demo/video_real.mp4).
+</video>
+
+[Abrir vídeo da aplicação integrada](docs/demo/video_real.mp4)
+
+### Demonstração com dados simulados
+
+Os dados simulados foram preparados para dar contexto aos gráficos, comparações de período e indicadores do Dashboard e de Insights, que podem parecer vazios quando há poucos pedidos.
+
+<video controls preload="metadata" width="100%">
+  <source src="./docs/demo/video_dados_demo.mp4" type="video/mp4">
+  <source src="https://raw.githubusercontent.com/vitorbmulford/food-delivery/master/docs/demo/video_dados_demo.mp4" type="video/mp4">
+  Seu navegador não oferece reprodução de vídeo. [Abra o vídeo](docs/demo/video_dados_demo.mp4).
+</video>
+
+[Abrir vídeo com dados simulados](docs/demo/video_dados_demo.mp4)
 
 ## O que foi solicitado e entregue
 
@@ -253,9 +279,7 @@ Esses resultados pertencem à validação técnica daquele `HEAD`; não foram re
 
 Não fazem parte da implementação: pagamentos, catálogo de produtos, gestão de estoque, cálculo de frete, otimização de rotas e rastreamento GPS em tempo real.
 
-## Demonstração e documentação complementar
-
-Não há screenshots ou vídeo de demonstração incluídos neste repositório.
+## Documentação complementar
 
 - [Guia do frontend](frontend/README.md)
 - [Guia do backend](backend/README.md)
