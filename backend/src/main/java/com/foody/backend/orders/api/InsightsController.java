@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/insights")
-@Tag(name = "Insights", description = "Commercial and operational analytics for the authenticated customer")
+@Tag(name = "Insights", description = "Commercial and operational analytics for the authenticated operator")
 @SecurityRequirement(name = "bearerAuth")
 public class InsightsController {
     private final InsightsService insights;

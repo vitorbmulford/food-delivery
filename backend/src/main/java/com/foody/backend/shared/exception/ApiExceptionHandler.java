@@ -7,6 +7,7 @@ import com.foody.backend.orders.domain.InvalidOrderStatusTransitionException;
 import com.foody.backend.orders.domain.OrderValueOutOfRangeException;
 import java.time.Instant;
 import java.util.Map;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -23,6 +24,16 @@ public class ApiExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request validation failed");
         problem.setProperty("errors", exception.getBindingResult().getFieldErrors().stream()
                 .collect(java.util.stream.Collectors.toMap(error -> error.getField(), error -> error.getDefaultMessage(), (first, ignored) -> first)));
+        return problem;
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    ProblemDetail invalidConstraint(ConstraintViolationException exception) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request validation failed");
+        problem.setProperty("errors", exception.getConstraintViolations().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        violation -> violation.getPropertyPath().toString(),
+                        violation -> violation.getMessage(), (first, ignored) -> first)));
         return problem;
     }
 

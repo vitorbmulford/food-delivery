@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 public record CreateOrderRequest(
+        @NotNull @Valid CreateOrderCustomerRequest customer,
         @NotEmpty List<@Valid CreateOrderItemRequest> items,
         @NotNull @Valid DeliveryAddressRequest deliveryAddress) {
     public CreateOrderRequest {

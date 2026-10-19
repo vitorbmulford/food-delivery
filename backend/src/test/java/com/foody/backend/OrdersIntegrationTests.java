@@ -13,6 +13,7 @@ import com.foody.backend.geocoding.domain.GeocodingStatus;
 import com.foody.backend.orders.infrastructure.persistence.OrderRepository;
 import java.math.BigDecimal;
 import java.util.UUID;
+import java.util.List;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ import org.springframework.test.web.servlet.MvcResult;
 @AutoConfigureMockMvc
 class OrdersIntegrationTests {
     private static final String ORDER = """
-            {"items":[{"productName":"Hambúrguer Artesanal","quantity":2,"unitPrice":32.90},{"productName":"Refrigerante","quantity":1,"unitPrice":8.50}],
+            {"customer":{"name":"Maria Silva","phone":"(11) 99999-9999","email":"maria@example.com"},"items":[{"productName":"Hambúrguer Artesanal","quantity":2,"unitPrice":32.90},{"productName":"Refrigerante","quantity":1,"unitPrice":8.50}],
             "deliveryAddress":{"street":"Rua das Flores","number":"120","complement":"Apto 42","neighborhood":"Centro","city":"São Paulo","state":"SP","postalCode":"01001000"}}""";
     @Autowired private MockMvc mvc;
     @Autowired private OrderRepository orderRepository;
@@ -41,6 +42,8 @@ class OrdersIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON).content(ORDER))
                 .andExpect(status().isCreated()).andExpect(header().string("Location", org.hamcrest.Matchers.containsString("/api/orders/")))
                 .andExpect(jsonPath("$.status").value("RECEBIDO"))
+                .andExpect(jsonPath("$.customer.name").value("Maria Silva"))
+                .andExpect(jsonPath("$.customer.phone").value("11999999999"))
                 .andExpect(jsonPath("$.coordinates").doesNotExist())
                 .andExpect(jsonPath("$.geocodingStatus").value("PENDING"))
                 .andExpect(jsonPath("$.totalAmount").value(74.30))
@@ -68,7 +71,13 @@ class OrdersIntegrationTests {
         String stranger = tokenFor("stranger-order@example.com");
         mvc.perform(post("/api/orders").contentType(MediaType.APPLICATION_JSON).content(ORDER)).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/orders").header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"items\":[],\"deliveryAddress\":{}}"))
+                .content("{\"customer\":{},\"items\":[],\"deliveryAddress\":{}}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/orders").header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                .content(ORDER.replace("\"phone\":\"(11) 99999-9999\"", "\"phone\":\"\"")))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/orders").header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                .content(ORDER.replace("maria@example.com", "email-inválido")))
                 .andExpect(status().isBadRequest());
         mvc.perform(post("/api/orders").header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
                 .content(ORDER.replace("\"quantity\":2", "\"quantity\":0"))).andExpect(status().isBadRequest());
@@ -151,6 +160,33 @@ class OrdersIntegrationTests {
         mvc.perform(get("/api/orders/{id}/history", id)).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/orders/{id}/history", UUID.randomUUID()).header("Authorization", bearer(owner)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void searchesCustomerSnapshotOrOrderIdWithoutLeakingAnotherOperatorsOrders() throws Exception {
+        String owner = tokenFor("search-owner@example.com");
+        String stranger = tokenFor("search-stranger@example.com");
+        String payload = ORDER.replace("Maria Silva", "Maria Busca Exclusiva")
+                .replace("(11) 99999-9999", "(11) 98765-4321")
+                .replace("maria@example.com", "maria.busca@example.com");
+        MvcResult created = mvc.perform(post("/api/orders").header("Authorization", bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isCreated()).andReturn();
+        String id = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+
+        for (String search : List.of("busca exclusiva", "MARIA.BUSCA", "(11) 98765-4321", id)) {
+            mvc.perform(get("/api/orders").header("Authorization", bearer(owner)).param("search", search)
+                            .param("status", "RECEBIDO"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.page.totalElements").value(1))
+                    .andExpect(jsonPath("$.content[0].id").value(id));
+        }
+        mvc.perform(get("/api/orders").header("Authorization", bearer(owner)).param("search", "not-a-uuid"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.page.totalElements").value(0));
+        mvc.perform(get("/api/orders").header("Authorization", bearer(owner)).param("search", "x".repeat(101)))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/orders").header("Authorization", bearer(stranger)).param("search", "Maria Busca Exclusiva"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.page.totalElements").value(0));
     }
 
     @Test

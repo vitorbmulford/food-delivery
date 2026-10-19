@@ -36,17 +36,17 @@ public class InsightsService {
     private InsightsResponse.Summary summary(UUID ownerId, LocalDate from, LocalDate to) {
         Timestamp start = start(from), end = end(to);
         var created = jdbc.queryForMap("SELECT count(*) AS n, coalesce(sum(total_amount),0) AS v FROM orders "
-                + "WHERE customer_id=? AND created_at>=? AND created_at<?", ownerId, start, end);
+                + "WHERE owner_id=? AND created_at>=? AND created_at<?", ownerId, start, end);
         var delivered = jdbc.queryForMap("WITH events AS (SELECT DISTINCT ON (h.order_id) h.order_id FROM order_status_history h "
-                + "JOIN orders o ON o.id=h.order_id WHERE o.customer_id=? AND h.new_status='ENTREGUE' AND h.changed_at>=? AND h.changed_at<? ORDER BY h.order_id,h.changed_at) "
+                + "JOIN orders o ON o.id=h.order_id WHERE o.owner_id=? AND h.new_status='ENTREGUE' AND h.changed_at>=? AND h.changed_at<? ORDER BY h.order_id,h.changed_at) "
                 + "SELECT count(*) AS n, coalesce(sum(o.total_amount),0) AS v, coalesce(sum(i.qty),0) AS items "
                 + "FROM events e JOIN orders o ON o.id=e.order_id LEFT JOIN (SELECT order_id,sum(quantity) qty FROM order_items GROUP BY order_id) i ON i.order_id=o.id",
                 ownerId, start, end);
         var cancelled = jdbc.queryForMap("WITH events AS (SELECT DISTINCT ON (h.order_id) h.order_id FROM order_status_history h "
-                + "JOIN orders o ON o.id=h.order_id WHERE o.customer_id=? AND h.new_status='CANCELADO' AND h.changed_at>=? AND h.changed_at<? ORDER BY h.order_id,h.changed_at) "
+                + "JOIN orders o ON o.id=h.order_id WHERE o.owner_id=? AND h.new_status='CANCELADO' AND h.changed_at>=? AND h.changed_at<? ORDER BY h.order_id,h.changed_at) "
                 + "SELECT count(*) AS n, coalesce(sum(o.total_amount),0) AS v FROM events e JOIN orders o ON o.id=e.order_id",
                 ownerId, start, end);
-        var ongoing = jdbc.queryForObject("SELECT coalesce(sum(total_amount),0) FROM orders WHERE customer_id=? "
+        var ongoing = jdbc.queryForObject("SELECT coalesce(sum(total_amount),0) FROM orders WHERE owner_id=? "
                 + "AND status IN ('RECEBIDO','EM_PREPARO','SAIU_PARA_ENTREGA')", BigDecimal.class, ownerId);
         long deliveredCount = number(delivered, "n");
         BigDecimal deliveredValue = money(delivered, "v");
@@ -61,13 +61,13 @@ public class InsightsService {
         return jdbc.query("""
                 WITH days AS (SELECT generate_series(?::date, ?::date, interval '1 day')::date d),
                 created AS (SELECT (created_at AT TIME ZONE 'America/Sao_Paulo')::date d,count(*) n,sum(total_amount) v FROM orders
-                  WHERE customer_id=? AND created_at>=? AND created_at<? GROUP BY 1),
+                  WHERE owner_id=? AND created_at>=? AND created_at<? GROUP BY 1),
                 events AS (SELECT (h.changed_at AT TIME ZONE 'America/Sao_Paulo')::date d,
                   count(*) FILTER (WHERE h.new_status='ENTREGUE') dn,
                   sum(o.total_amount) FILTER (WHERE h.new_status='ENTREGUE') dv,
                   count(*) FILTER (WHERE h.new_status='CANCELADO') cn,
                   sum(o.total_amount) FILTER (WHERE h.new_status='CANCELADO') cv
-                  FROM order_status_history h JOIN orders o ON o.id=h.order_id WHERE o.customer_id=?
+                  FROM order_status_history h JOIN orders o ON o.id=h.order_id WHERE o.owner_id=?
                   AND h.new_status IN ('ENTREGUE','CANCELADO') AND h.changed_at>=? AND h.changed_at<? GROUP BY 1)
                 SELECT days.d,coalesce(c.v,0) cv,coalesce(e.dv,0) dv,coalesce(e.cv,0) xv,
                   coalesce(c.n,0) cn,coalesce(e.dn,0) dn,coalesce(e.cn,0) xn
@@ -78,14 +78,14 @@ public class InsightsService {
     }
 
     private List<InsightsResponse.StatusValue> currentStatuses(UUID ownerId) {
-        return jdbc.query("SELECT status,coalesce(sum(total_amount),0) v,count(*) n FROM orders WHERE customer_id=? GROUP BY status ORDER BY status",
+        return jdbc.query("SELECT status,coalesce(sum(total_amount),0) v,count(*) n FROM orders WHERE owner_id=? GROUP BY status ORDER BY status",
                 (rs, n) -> new InsightsResponse.StatusValue(rs.getString(1), rs.getBigDecimal(2), rs.getLong(3)), ownerId);
     }
 
     private List<InsightsResponse.Hour> hourly(UUID ownerId, LocalDate from, LocalDate to) {
         Timestamp start = start(from), end = end(to);
         return jdbc.query("SELECT extract(hour FROM created_at AT TIME ZONE 'America/Sao_Paulo')::int h,count(*) n FROM orders "
-                        + "WHERE customer_id=? AND created_at>=? AND created_at<? GROUP BY 1 ORDER BY 1",
+                        + "WHERE owner_id=? AND created_at>=? AND created_at<? GROUP BY 1 ORDER BY 1",
                 (rs, n) -> new InsightsResponse.Hour(rs.getInt(1), rs.getLong(2)), ownerId, start, end);
     }
 
@@ -93,7 +93,7 @@ public class InsightsService {
         Timestamp start = start(from), end = end(to);
         return jdbc.query("""
                 WITH delivered AS (SELECT DISTINCT ON (h.order_id) h.order_id FROM order_status_history h JOIN orders o ON o.id=h.order_id
-                  WHERE o.customer_id=? AND h.new_status='ENTREGUE' AND h.changed_at>=? AND h.changed_at<? ORDER BY h.order_id,h.changed_at),
+                  WHERE o.owner_id=? AND h.new_status='ENTREGUE' AND h.changed_at>=? AND h.changed_at<? ORDER BY h.order_id,h.changed_at),
                 grouped AS (SELECT lower(regexp_replace(btrim(i.product_name), '\\s+', ' ', 'g')) normalized,
                   min(regexp_replace(btrim(i.product_name), '\\s+', ' ', 'g')) name,sum(i.quantity)::bigint qty,sum(i.subtotal) value
                   FROM delivered d JOIN order_items i ON i.order_id=d.order_id GROUP BY 1),
@@ -110,7 +110,7 @@ public class InsightsService {
                   min(h.changed_at) FILTER (WHERE h.new_status='EM_PREPARO') prep,
                   min(h.changed_at) FILTER (WHERE h.new_status='SAIU_PARA_ENTREGA') exit,
                   min(h.changed_at) FILTER (WHERE h.new_status='ENTREGUE') delivered
-                  FROM orders o JOIN order_status_history h ON h.order_id=o.id WHERE o.customer_id=?
+                  FROM orders o JOIN order_status_history h ON h.order_id=o.id WHERE o.owner_id=?
                   AND h.new_status IN ('EM_PREPARO','SAIU_PARA_ENTREGA','ENTREGUE') GROUP BY o.id,o.created_at),
                 cohort AS (SELECT * FROM events WHERE delivered>=? AND delivered<?)
                 SELECT avg(extract(epoch FROM (prep-created_at))/60) FILTER (WHERE prep>=created_at) a, count(*) FILTER (WHERE prep>=created_at) ac,

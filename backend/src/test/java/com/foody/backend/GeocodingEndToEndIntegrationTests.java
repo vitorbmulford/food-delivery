@@ -54,7 +54,7 @@ class GeocodingEndToEndIntegrationTests {
     private static final ConcurrentLinkedQueue<Long> ARRIVALS = new ConcurrentLinkedQueue<>();
     private static final HttpServer NOMINATIM = startNominatim();
     private static final String ORDER = """
-            {"items":[{"productName":"Hambúrguer Artesanal","quantity":2,"unitPrice":32.90}],
+            {"customer":{"name":"Maria Silva","phone":"11999999999"},"items":[{"productName":"Hambúrguer Artesanal","quantity":2,"unitPrice":32.90}],
             "deliveryAddress":{"street":"Avenida Paulista","number":"1578","neighborhood":"Bela Vista","city":"São Paulo","state":"SP","postalCode":"01310200"}}""";
 
     @Autowired private MockMvc mvc;
