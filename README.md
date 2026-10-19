@@ -21,16 +21,20 @@ food-delivery-completo/
 └── README.md
 ```
 
-## Configuração local
+## Configuração do ambiente
 
-Copie `.env.example` para `.env` na raiz para usar Docker Compose. Para executar pelo IntelliJ a partir do módulo `backend`, crie `backend/.env` com as variáveis de JWT necessárias; esse arquivo é carregado localmente e é ignorado pelo Git.
+O `.env.example` na raiz é a referência do ambiente integrado via Docker Compose. O Compose lê automaticamente o `.env` da raiz para interpolar `${VAR}` no `compose.yaml`; copie o exemplo e substitua `JWT_SECRET` por uma chave local gerada. Todas as opções de Nominatim, retry, circuit breaker e rate limiting declaradas no exemplo são encaminhadas ao container do backend.
 
 ```bash
 cp .env.example .env
 openssl rand -base64 32
 ```
 
-Defina o valor gerado como `JWT_SECRET`. A chave deve ser texto de 32+ caracteres ou Base64 que represente pelo menos 32 bytes. Nunca versione a chave real.
+A chave JWT deve ser texto de 32+ caracteres ou Base64 que represente pelo menos 32 bytes. Nunca versione a chave real. O `.env.example` contém apenas valores de desenvolvimento e marcadores de exemplo.
+
+Para executar o backend diretamente pelo IntelliJ ou Maven, inicie o PostgreSQL em Compose e mantenha o diretório de trabalho como `backend/`. O Spring Boot importa um `.env` relativo ao diretório de trabalho: nesse modo, crie `backend/.env` apenas com `JWT_SECRET` (e eventuais `SPRING_DATASOURCE_*` ou outras variáveis que queira sobrescrever). Esse arquivo local é ignorado pelo Git e não precisa duplicar o exemplo da raiz. Sem sobrescritas de banco, a aplicação usa `localhost:5432/foody_delivery`, usuário `foody` e senha `foody_local`, os mesmos padrões do Compose. Se alterar os valores `POSTGRES_*` ou `POSTGRES_PORT` na configuração da raiz, ajuste as propriedades `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD` em `backend/.env` para a execução direta: as variáveis `POSTGRES_*` são consumidas pelo Compose e não são aliases Spring.
+
+O `.env` da raiz não é importado pelo Spring quando o diretório de trabalho é `backend/`; essa separação evita depender do diretório de onde o IntelliJ/Maven é iniciado. Não é necessário criar `backend/.env.example`: as variáveis de aplicação e seus padrões estão documentados em `backend/src/main/resources/application.yml`, e os valores concretos locais ficam em arquivos ignorados.
 
 Para iniciar somente PostgreSQL:
 

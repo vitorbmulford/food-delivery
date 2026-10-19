@@ -200,8 +200,8 @@
                 <version>${spotbugs.version}</version>
                 <configuration>
                     <effort>Default</effort>
-                    <threshold>Medium</threshold>
-                    <failOnError>false</failOnError>
+                    <threshold>Low</threshold>
+                    <failOnError>true</failOnError>
                     <maxAllowedViolations>0</maxAllowedViolations>
                 </configuration>
                 <executions>
@@ -211,6 +211,9 @@
                         <goals>
                             <goal>check</goal>
                         </goals>
+                        <configuration>
+                            <failThreshold>Low</failThreshold>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

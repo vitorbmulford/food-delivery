@@ -74,6 +74,15 @@ class OrdersIntegrationTests {
                 .content(ORDER.replace("\"unitPrice\":32.90", "\"unitPrice\":0"))).andExpect(status().isBadRequest());
         mvc.perform(post("/api/orders").header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
                 .content(ORDER.replace("\"street\":\"Rua das Flores\"", "\"street\":\"\""))).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/orders").header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                .content(ORDER.replace("Hambúrguer Artesanal", "X".repeat(161)))).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/orders").header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                .content(ORDER.replace("\"unitPrice\":32.90", "\"unitPrice\":99999999999999999.99")))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/orders").header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                .content(ORDER.replace("\"unitPrice\":32.90", "\"unitPrice\":60000000000000000.00")
+                        .replace("\"unitPrice\":8.50", "\"unitPrice\":60000000000000000.00")))
+                .andExpect(status().isBadRequest());
         MvcResult created = mvc.perform(post("/api/orders").header("Authorization", bearer(owner)).contentType(MediaType.APPLICATION_JSON).content(ORDER))
                 .andExpect(status().isCreated()).andReturn();
         String id = JsonPath.read(created.getResponse().getContentAsString(), "$.id");
