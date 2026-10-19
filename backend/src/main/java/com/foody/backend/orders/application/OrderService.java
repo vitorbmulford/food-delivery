@@ -30,6 +30,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 
 @Service
 public class OrderService {
@@ -40,13 +42,17 @@ public class OrderService {
     private final UserRepository users;
     private final ApplicationEventPublisher events;
     private final GeocodingDispatcher geocoding;
+    private final Counter ordersCreated;
+    private final Counter statusChanged;
 
-    public OrderService(OrderRepository orders, OrderStatusHistoryRepository statusHistory, UserRepository users, ApplicationEventPublisher events, GeocodingDispatcher geocoding) {
+    public OrderService(OrderRepository orders, OrderStatusHistoryRepository statusHistory, UserRepository users, ApplicationEventPublisher events, GeocodingDispatcher geocoding, MeterRegistry meterRegistry) {
         this.orders = orders;
         this.statusHistory = statusHistory;
         this.users = users;
         this.events = events;
         this.geocoding = geocoding;
+        this.ordersCreated = Counter.builder("orders.created").register(meterRegistry);
+        this.statusChanged = Counter.builder("orders.status.changed").register(meterRegistry);
     }
 
     @Transactional
@@ -62,6 +68,7 @@ public class OrderService {
         Order order = orders.save(new Order(customer, address, items, now));
         statusHistory.save(new OrderStatusHistory(order, null, OrderStatus.RECEBIDO, now, customer));
         events.publishEvent(new OrderGeocodingRequestedEvent(order.getId()));
+        ordersCreated.increment();
         return toResponse(order);
     }
 
@@ -88,6 +95,7 @@ public class OrderService {
         OrderStatusHistory history = statusHistory.save(new OrderStatusHistory(order, previousStatus, status, now, order.getCustomer()));
         events.publishEvent(new OrderStatusChangedEvent(order.getId(), order.getCustomer().getId(), previousStatus,
                 status, history.getId(), history.getChangedAt()));
+        statusChanged.increment();
         return toResponse(order);
     }
 

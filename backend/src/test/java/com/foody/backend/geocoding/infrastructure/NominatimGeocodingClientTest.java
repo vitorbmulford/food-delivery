@@ -10,6 +10,10 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,6 +72,31 @@ class NominatimGeocodingClientTest {
         assertThat(client.geocode(address()).status()).isEqualTo(GeocodingStatus.FAILED);
         response.set(new Response(200, "[{\"lat\":\"-23\",\"lon\":\"181\"}]", 0));
         assertThat(client.geocode(address()).status()).isEqualTo(GeocodingStatus.FAILED);
+    }
+
+    @Test
+    void parsesFutureHttpDateRetryAfterAgainstProvidedClock() {
+        Clock clock = Clock.fixed(Instant.parse("2026-10-18T12:00:00Z"), ZoneOffset.UTC);
+        String value = DateTimeFormatter.RFC_1123_DATE_TIME.format(Instant.parse("2026-10-18T12:00:30Z").atZone(ZoneOffset.UTC));
+
+        assertThat(NominatimGeocodingClient.parseRetryAfter(value, clock)).isEqualTo(Duration.ofSeconds(30));
+    }
+
+    @Test
+    void parsesPastAndInvalidHttpDateRetryAfterWithoutAddingWait() {
+        Clock clock = Clock.fixed(Instant.parse("2026-10-18T12:00:00Z"), ZoneOffset.UTC);
+        String past = DateTimeFormatter.RFC_1123_DATE_TIME.format(Instant.parse("2026-10-18T11:59:00Z").atZone(ZoneOffset.UTC));
+
+        assertThat(NominatimGeocodingClient.parseRetryAfter(past, clock)).isEqualTo(Duration.ZERO);
+        assertThat(NominatimGeocodingClient.parseRetryAfter("not-a-date-or-seconds", clock)).isNull();
+    }
+
+    @Test
+    void parsesNumericRetryAfterAndKeepsExcessiveValuesForBudgetPolicy() {
+        Clock clock = Clock.fixed(Instant.parse("2026-10-18T12:00:00Z"), ZoneOffset.UTC);
+
+        assertThat(NominatimGeocodingClient.parseRetryAfter("61", clock)).isEqualTo(Duration.ofSeconds(61));
+        assertThat(NominatimGeocodingClient.parseRetryAfter("-1", clock)).isNull();
     }
 
     private void respond(HttpExchange exchange) throws IOException {
