@@ -7,7 +7,11 @@ public class GeocodingProviderException extends RuntimeException {
     private final Duration retryAfter;
 
     public GeocodingProviderException(int status, Duration retryAfter) {
-        super("Geocoding provider returned " + status);
+        this(status, retryAfter, null);
+    }
+
+    public GeocodingProviderException(int status, Duration retryAfter, Throwable cause) {
+        super("Geocoding provider returned " + status, cause);
         this.status = status;
         this.retryAfter = retryAfter;
     }

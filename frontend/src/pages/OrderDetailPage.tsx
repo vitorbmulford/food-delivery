@@ -1,5 +1,5 @@
 import { Alert, Box, Button, Divider, Paper, Skeleton, Stack, Typography } from '@mui/material'
-import { ArrowLeft, CalendarClock, MapPin, Package, ReceiptText, UserRound } from 'lucide-react'
+import { ArrowLeft, CalendarClock, Package, ReceiptText, UserRound } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router'
 import { useRef } from 'react'
 import { PageHeading } from '../components/ui/PageHeading'
@@ -7,6 +7,7 @@ import { OrderStatusActions } from '../features/orders/components/OrderStatusAct
 import { OrderStatusChip } from '../features/orders/components/OrderStatusChip'
 import { OrderProgress } from '../features/orders/components/OrderProgress'
 import { OrderStatusTimeline } from '../features/orders/components/OrderStatusTimeline'
+import { OrderLocationCard } from '../features/orders/components/OrderLocationCard'
 import { useOrder } from '../features/orders/hooks/useOrders'
 import {
   formatCurrency,
@@ -219,30 +220,11 @@ export function OrderDetailPage() {
                 </Stack>
               </DetailPaper>
 
-              <DetailPaper>
-                <Stack spacing={2}>
-                  <SectionTitle
-                    icon={<MapPin size={20} aria-hidden="true" />}
-                    title="Endereço de entrega"
-                    description="Destino informado para este pedido"
-                  />
-                  <Box sx={{ pl: { sm: 6.5 } }}>
-                    <Typography sx={{ fontWeight: 700 }}>
-                      {query.data.deliveryAddress.street}, {query.data.deliveryAddress.number}
-                      {query.data.deliveryAddress.complement
-                        ? ` · ${query.data.deliveryAddress.complement}`
-                        : ''}
-                    </Typography>
-                    <Typography color="text.secondary">
-                      {query.data.deliveryAddress.neighborhood} · {query.data.deliveryAddress.city}/
-                      {query.data.deliveryAddress.state}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                      CEP {query.data.deliveryAddress.postalCode}
-                    </Typography>
-                  </Box>
-                </Stack>
-              </DetailPaper>
+              <OrderLocationCard
+                order={query.data}
+                onRefresh={() => void query.refetch()}
+                isRefreshing={query.isFetching}
+              />
             </Stack>
 
             <Stack spacing={2.5}>

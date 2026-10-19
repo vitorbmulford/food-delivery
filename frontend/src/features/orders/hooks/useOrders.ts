@@ -1,9 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRef } from 'react'
 import {
   createOrder,
   getOrder,
   getOrderHistory,
   listOrders,
+  requestOrderGeocoding,
+  setManualOrderLocation,
   updateOrderStatus,
 } from '../api/ordersApi'
 import type { CreateOrderInput, OrderFilters, OrderStatus } from '../types/order'
@@ -29,10 +32,45 @@ export function useOrders(filters: OrderFilters) {
 }
 
 export function useOrder(id: string, enabled = true) {
+  const polling = useRef<{ id: string; startedAt: number } | null>(null)
   return useQuery({
     queryKey: orderKeys.detail(id),
     queryFn: () => getOrder(id),
     enabled: Boolean(id) && enabled,
+    refetchInterval: (query) => {
+      if (query.state.data?.geocodingStatus !== 'PENDING') {
+        polling.current = null
+        return false
+      }
+      if (polling.current?.id !== id) polling.current = { id, startedAt: Date.now() }
+      return Date.now() - polling.current.startedAt < 120_000 ? 5_000 : false
+    },
+    refetchIntervalInBackground: false,
+  })
+}
+
+export function useRequestOrderGeocoding() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => requestOrderGeocoding(id),
+    onSuccess: (_status, id) => queryClient.invalidateQueries({ queryKey: orderKeys.detail(id) }),
+  })
+}
+
+export function useSetManualOrderLocation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      coordinates,
+    }: {
+      id: string
+      coordinates: { latitude: number; longitude: number }
+    }) => setManualOrderLocation(id, coordinates),
+    onSuccess: (order) => {
+      queryClient.setQueryData(orderKeys.detail(order.id), order)
+      return queryClient.invalidateQueries({ queryKey: orderKeys.lists() })
+    },
   })
 }
 

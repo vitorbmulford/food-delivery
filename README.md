@@ -125,7 +125,7 @@ Itens exigem nome, quantidade maior que zero e preço unitário maior que zero; 
 
 Transições inválidas e conflitos de atualização concorrente retornam `409 Conflict`; status ausente ou inválido retornam `400 Bad Request`. Para demonstrar o fluxo do MVP, o próprio cliente pode avançar o status. Em produção, esse endpoint deve ser limitado a restaurante, operação ou logística autorizados.
 
-O schema de pedidos é criado pelas migrations Flyway `V2__create_orders.sql`, `V3__add_order_geocoding.sql` e `V4__create_order_status_history.sql`, incluindo itens, endereço incorporado, índices de consulta, versão para optimistic locking e campos de geocodificação. A V5 cria as sessões persistentes de autenticação. O Swagger documenta os endpoints em `/swagger-ui/index.html` e permite executá-los após informar o JWT em **Authorize**.
+O schema de pedidos é criado pelas migrations Flyway `V2__create_orders.sql`, `V3__add_order_geocoding.sql` e `V4__create_order_status_history.sql`, incluindo itens, endereço incorporado, índices de consulta, versão para optimistic locking e campos de geocodificação. A V5 cria as sessões persistentes de autenticação, a V6 registra a origem das coordenadas e a V7 armazena separadamente sugestões aproximadas. O Swagger documenta os endpoints em `/swagger-ui/index.html` e permite executá-los após informar o JWT em **Authorize**.
 
 ### Histórico de status
 
@@ -146,19 +146,22 @@ Ao criar um pedido, ele é persistido primeiro com `geocodingStatus: PENDING`. A
 
 - `PENDING`: aguardando ou executando uma consulta.
 - `SUCCESS`: latitude e longitude foram encontradas e persistidas.
-- `NOT_FOUND`: o provedor não encontrou resultado; `coordinates` fica `null`.
+- `NOT_FOUND`: o endereço completo não foi localizado; `coordinates` fica `null`. O backend tenta, em sequência, rua + cidade + UF, bairro e CEP. Uma referência só é exposta em `suggestedCoordinates` quando país, cidade, UF e o dado do nível consultado são compatíveis. Ela serve apenas para centralizar a seleção manual e nunca é confirmada como destino automaticamente.
 - `FAILED`: timeout, rede indisponível, HTTP 429/5xx ou resposta inválida; `coordinates` fica `null`.
 
-`GET /api/orders` e `GET /api/orders/{id}` incluem `coordinates` e `geocodingStatus`. O proprietário pode solicitar nova tentativa com `POST /api/orders/{id}/geocode`, que retorna `202 Accepted`. Coordenadas válidas não são sobrescritas e um guard em memória impede tentativas simultâneas para o mesmo pedido.
+`GET /api/orders` e `GET /api/orders/{id}` incluem `coordinates`, `coordinateSource`, `geocodingStatus`, `suggestedCoordinates` e `geocodingSuggestionLevel`. O proprietário pode solicitar nova tentativa com `POST /api/orders/{id}/geocode`, que retorna `202 Accepted`, ou confirmar a seleção manual com `PATCH /api/orders/{id}/location`. A confirmação preserva o endereço postal e impede que uma resposta assíncrona posterior sobrescreva o ponto manual. Um guard em memória impede tentativas simultâneas para o mesmo pedido.
 
 ```json
 {
   "coordinates": { "latitude": -23.5614, "longitude": -46.6559 },
-  "geocodingStatus": "SUCCESS"
+  "geocodingStatus": "SUCCESS",
+  "coordinateSource": "AUTOMATIC",
+  "suggestedCoordinates": null,
+  "geocodingSuggestionLevel": null
 }
 ```
 
-Configure `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT`, `NOMINATIM_CONNECT_TIMEOUT` e `NOMINATIM_READ_TIMEOUT` no `.env`. O limite é deliberadamente de uma requisição por segundo, com `User-Agent` identificável. O serviço público não deve ser usado para geocodificação em massa; em produção use contato real no User-Agent e avalie provedor gerenciado ou auto-hospedado conforme o volume.
+Configure `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT`, `NOMINATIM_CONNECT_TIMEOUT` e `NOMINATIM_READ_TIMEOUT` no `.env`. O limite é deliberadamente de uma requisição por segundo, com `User-Agent` identificável por URL pública do projeto ou contato monitorado; endereços fictícios como `admin@example.com` podem ser bloqueados com HTTP 403. O serviço público não deve ser usado para geocodificação em massa; em produção use contato real no User-Agent e avalie provedor gerenciado ou auto-hospedado conforme o volume. Falhas do provedor registram no backend o status HTTP, se são transitórias e o `Retry-After`, mantendo detalhes internos fora da resposta ao frontend.
 
 A fila e o guard de duplicidade são somente em memória: tentativas em espera ou em andamento não são retomadas após reinício. O endpoint de reprocessamento é a recuperação manual segura. Os testes automatizados usam um servidor HTTP local simulado e nunca dependem do Nominatim público.
 
@@ -223,11 +226,11 @@ O limite é por instância: em múltiplas réplicas não há coordenação distr
 
 ### Nominatim: retry, circuit breaker e limite global
 
-Cada tentativa, inclusive retry e reprocessamento manual, passa pelo limitador global de uma requisição por segundo. Em seguida a chamada é protegida por Circuit Breaker programático do Resilience4j e Retry programático. A política padrão é até 3 tentativas, backoff exponencial de 1 s, multiplicador 2, jitter de 20% e teto de 5 s. Timeout/rede, 429, 502, 503 e 504 podem ser repetidos; 400/401/403, endereço não encontrado e respostas válidas vazias não são. `Retry-After` numérico ou HTTP-date recebido em 429 adia o limitador global (até um orçamento seguro de um minuto), portanto uma tentativa posterior não antecipa o provedor.
+Cada chamada, inclusive retry, fallback e reprocessamento manual, passa pelo limitador global de uma requisição por segundo. A sequência progressiva faz no máximo quatro consultas quando todas retornam vazias e para no primeiro nível confiável. Cada nível tem Retry programático independente, portanto uma falha transitória tardia não repete as consultas anteriores. A política padrão é até 3 tentativas, backoff exponencial de 1 s, multiplicador 2, jitter de 20% e teto de 5 s. Timeout/rede, 429, 502, 503 e 504 podem ser repetidos; 400/401/403, endereço não encontrado e respostas válidas vazias não são. `Retry-After` numérico ou HTTP-date recebido em 429 adia o limitador global (até um orçamento seguro de um minuto), portanto uma tentativa posterior não antecipa o provedor.
 
 O breaker `nominatim` inicia fechado, abre após a janela configurável (padrão: ao menos 5 chamadas, 50% de falhas), espera 30 s e permite 2 chamadas em `HALF_OPEN`. Quando aberto não há HTTP; a geocodificação é marcada como falha sem afetar o pedido já confirmado. Os parâmetros `NOMINATIM_RETRY_*` e `NOMINATIM_CIRCUIT_*` configuram a política. Como o executor assíncrono é propositalmente unitário, o backoff bloqueia essa única tarefa durante a espera: é uma limitação MVP documentada, sem fila distribuída.
 
-Ordem operacional: rate limit de entrada → validação JWT → transação de pedido → evento após commit → executor assíncrono → circuit breaker → retry → limitador global Nominatim → cliente HTTP. O Circuit Breaker envolve a operação lógica inteira: uma sequência de retries esgotada conta como uma falha, em vez de multiplicar a contagem por tentativa. Cada tentativa continua passando pelo limitador global; uma rejeição do breaker não é uma chamada HTTP.
+Ordem operacional: rate limit de entrada → validação JWT → transação de pedido → evento após commit → executor assíncrono → circuit breaker da operação → sequência progressiva → retry do nível → limitador global Nominatim → cliente HTTP. O Circuit Breaker envolve a operação lógica inteira: um nível com retries esgotados conta como uma falha da operação, em vez de multiplicar a contagem por tentativa. Cada tentativa continua passando pelo limitador global; uma rejeição do breaker não é uma chamada HTTP.
 
 ### Actuator e métricas
 

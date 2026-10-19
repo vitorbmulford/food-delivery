@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Supplier;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -74,17 +75,22 @@ public class GeocodingService {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "FAILED";
         try {
-            // The breaker surrounds the whole logical operation: one exhausted retry sequence is one breaker outcome.
-            GeocodingResult result = circuitBreaker.executeSupplier(() -> retry.executeSupplier(() -> attempt(address)));
+            // The breaker surrounds the whole logical operation; each provider step retries independently.
+            GeocodingResult result = circuitBreaker.executeSupplier(() -> attempt(address));
             persistence.apply(orderId, result);
             outcome = result.status().name();
         } catch (CallNotPermittedException exception) {
             failures.increment();
             LOGGER.warn("Geocoding rejected by open circuit breaker orderId={}", orderId);
             markFailed(orderId);
+        } catch (GeocodingProviderException exception) {
+            failures.increment();
+            LOGGER.warn("Geocoding provider failure orderId={} status={} transient={} retryAfter={}",
+                    orderId, exception.status(), exception.isTransient(), exception.retryAfter(), exception);
+            markFailed(orderId);
         } catch (RuntimeException exception) {
             failures.increment();
-            LOGGER.warn("Unexpected geocoding failure for order {}: {}", orderId, exception.getClass().getSimpleName());
+            LOGGER.warn("Unexpected geocoding failure orderId={}", orderId, exception);
             markFailed(orderId);
         } finally {
             sample.stop(Timer.builder("geocoding.duration").tag("outcome", outcome)
@@ -95,10 +101,30 @@ public class GeocodingService {
     CircuitBreaker.State circuitState() { return circuitBreaker.getState(); }
 
     private GeocodingResult attempt(com.foody.backend.orders.domain.DeliveryAddress address) {
+        GeocodingResult result = providerRequest(() -> client.geocodeOrThrow(address));
+        if (result.status() != com.foody.backend.geocoding.domain.GeocodingStatus.NOT_FOUND) {
+            return result;
+        }
+        result = providerRequest(() -> client.geocodeStreetSuggestionOrThrow(address));
+        if (result.suggestedCoordinates() != null) {
+            return result;
+        }
+        result = providerRequest(() -> client.geocodeNeighborhoodSuggestionOrThrow(address));
+        if (result.suggestedCoordinates() != null) {
+            return result;
+        }
+        return providerRequest(() -> client.geocodePostalCodeSuggestionOrThrow(address));
+    }
+
+    private GeocodingResult providerRequest(Supplier<GeocodingResult> request) {
+        return retry.executeSupplier(() -> singleProviderRequest(request));
+    }
+
+    private GeocodingResult singleProviderRequest(Supplier<GeocodingResult> request) {
         try {
             rateLimiter.awaitPermit();
             requests.increment();
-            return client.geocodeOrThrow(address);
+            return request.get();
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new TransientGeocodingProviderException(0, null);

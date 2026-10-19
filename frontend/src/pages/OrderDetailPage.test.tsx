@@ -39,6 +39,9 @@ const order: Order = {
   updatedAt: '2026-10-19T12:10:00Z',
   coordinates: null,
   geocodingStatus: 'PENDING',
+  coordinateSource: null,
+  suggestedCoordinates: null,
+  geocodingSuggestionLevel: null,
 }
 const received: OrderStatusHistory = {
   id: 'event-1',

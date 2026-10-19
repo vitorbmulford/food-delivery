@@ -2,6 +2,7 @@ package com.foody.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -28,7 +29,10 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
@@ -42,6 +46,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 class GeocodingEndToEndIntegrationTests {
     private static final String HTTP_DATE_AFTER_PREFIX = "__HTTP_DATE_AFTER_SECONDS__:";
     private static final AtomicInteger REQUESTS = new AtomicInteger();
@@ -93,6 +98,109 @@ class GeocodingEndToEndIntegrationTests {
     }
 
     @Test
+    void usesValidatedStreetFallbackOnlyAsAnUnconfirmedSuggestion() throws Exception {
+        RESPONSES.add(new Response(200, "[]", null));
+        RESPONSES.add(new Response(200, streetResult(), null));
+        String token = tokenFor("street-fallback@example.com");
+
+        String response = awaitStatus(token, createOrder(token), "NOT_FOUND", 50);
+
+        assertThat((Object) JsonPath.read(response, "$.coordinates")).isNull();
+        assertThat(String.valueOf((Object) JsonPath.read(response, "$.geocodingSuggestionLevel")))
+                .isEqualTo("STREET");
+        assertThat(JsonPath.read(response, "$.suggestedCoordinates.latitude").toString()).isEqualTo("-23.5614");
+        assertThat(REQUESTS.get()).isEqualTo(2);
+    }
+
+    @Test
+    void progressesToNeighborhoodFallbackWhenStreetIsNotFound() throws Exception {
+        RESPONSES.add(new Response(200, "[]", null));
+        RESPONSES.add(new Response(200, "[]", null));
+        RESPONSES.add(new Response(200, neighborhoodResult(), null));
+        String token = tokenFor("neighborhood-fallback@example.com");
+
+        String response = awaitStatus(token, createOrder(token), "NOT_FOUND", 60);
+
+        assertThat(String.valueOf((Object) JsonPath.read(response, "$.geocodingSuggestionLevel")))
+                .isEqualTo("NEIGHBORHOOD");
+        assertThat((Object) JsonPath.read(response, "$.coordinates")).isNull();
+        assertThat(REQUESTS.get()).isEqualTo(3);
+    }
+
+    @Test
+    void progressesToPostalCodeFallbackAndKeepsItApproximate() throws Exception {
+        RESPONSES.add(new Response(200, "[]", null));
+        RESPONSES.add(new Response(200, "[]", null));
+        RESPONSES.add(new Response(200, "[]", null));
+        RESPONSES.add(new Response(200, postalCodeResult("01310-200"), null));
+        String token = tokenFor("postal-fallback@example.com");
+
+        String response = awaitStatus(token, createOrder(token), "NOT_FOUND", 70);
+
+        assertThat(String.valueOf((Object) JsonPath.read(response, "$.geocodingSuggestionLevel")))
+                .isEqualTo("POSTAL_CODE");
+        assertThat((Object) JsonPath.read(response, "$.coordinates")).isNull();
+        assertThat(REQUESTS.get()).isEqualTo(4);
+    }
+
+    @Test
+    void rejectsIncompatiblePostalFallbackAndLeavesOrderFunctionalWithoutSuggestion() throws Exception {
+        RESPONSES.add(new Response(200, "[]", null));
+        RESPONSES.add(new Response(200, "[]", null));
+        RESPONSES.add(new Response(200, "[]", null));
+        RESPONSES.add(new Response(200, postalCodeResult("99999-999"), null));
+        String token = tokenFor("rejected-postal-fallback@example.com");
+
+        String response = awaitStatus(token, createOrder(token), "NOT_FOUND", 70);
+
+        assertThat((Object) JsonPath.read(response, "$.coordinates")).isNull();
+        assertThat((Object) JsonPath.read(response, "$.suggestedCoordinates")).isNull();
+        assertThat((Object) JsonPath.read(response, "$.geocodingSuggestionLevel")).isNull();
+        assertThat(REQUESTS.get()).isEqualTo(4);
+    }
+
+    @Test
+    void retriesOnlyTheFallbackLevelThatFailedTransiently() throws Exception {
+        RESPONSES.add(new Response(200, "[]", null));
+        RESPONSES.add(new Response(200, "[]", null));
+        RESPONSES.add(new Response(200, "[]", null));
+        RESPONSES.add(new Response(503, "temporarily unavailable", null));
+        RESPONSES.add(new Response(200, postalCodeResult("01310-200"), null));
+        String token = tokenFor("postal-retry-fallback@example.com");
+
+        String response = awaitStatus(token, createOrder(token), "NOT_FOUND", 90);
+
+        assertThat(String.valueOf((Object) JsonPath.read(response, "$.geocodingSuggestionLevel")))
+                .isEqualTo("POSTAL_CODE");
+        assertThat(REQUESTS.get()).as("three earlier levels plus the retried postal level").isEqualTo(5);
+    }
+
+    @Test
+    void laterNominatimResponseDoesNotOverwriteManuallyConfirmedCoordinates() throws Exception {
+        RESPONSES.add(new Response(200, "[{\"lat\":\"-23.5614\",\"lon\":\"-46.6559\"}]", null, 500));
+        String token = tokenFor("manual-location-race@example.com");
+        String id = createOrder(token);
+
+        mvc.perform(patch("/api/orders/{id}/location", id).header("Authorization", bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\":-23.550520,\"longitude\":-46.633309}"))
+                .andExpect(status().isOk());
+
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        while (REQUESTS.get() == 0 && System.nanoTime() < deadline) {
+            Thread.sleep(50);
+        }
+        assertThat(REQUESTS.get()).isEqualTo(1);
+        Thread.sleep(600);
+
+        mvc.perform(get("/api/orders/{id}", id).header("Authorization", bearer(token)))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.coordinates.latitude").value(-23.550520))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.coordinates.longitude").value(-46.633309))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.coordinateSource").value("MANUAL"));
+    }
+
+    @Test
     void retriesTransient503ThenPersistsCoordinates() throws Exception {
         double durationCount = timerCount("SUCCESS");
         RESPONSES.add(new Response(503, "temporarily unavailable", null));
@@ -109,10 +217,10 @@ class GeocodingEndToEndIntegrationTests {
     }
 
     @Test
-    void doesNotRetryPermanent400AndMarksGeocodingFailed() throws Exception {
+    void doesNotRetryPermanent403MarksFailedAndLogsProviderStatus(CapturedOutput output) throws Exception {
         double durationCount = timerCount("FAILED");
-        RESPONSES.add(new Response(400, "bad address", null));
-        String token = tokenFor("permanent-400@example.com");
+        RESPONSES.add(new Response(403, "access denied", null));
+        String token = tokenFor("permanent-403@example.com");
         MvcResult created = mvc.perform(post("/api/orders").header("Authorization", bearer(token))
                         .contentType(MediaType.APPLICATION_JSON).content(ORDER))
                 .andExpect(status().isCreated()).andReturn();
@@ -121,6 +229,9 @@ class GeocodingEndToEndIntegrationTests {
         assertThat(String.valueOf((Object) JsonPath.read(response, "$.geocodingStatus"))).isEqualTo("FAILED");
         assertThat(REQUESTS.get()).isEqualTo(1);
         assertThat(timerCount("FAILED")).isGreaterThan(durationCount);
+        assertThat(output).contains("Geocoding provider failure orderId=" + id)
+                .contains("status=403")
+                .contains("transient=false");
     }
 
     @Test
@@ -369,6 +480,24 @@ class GeocodingEndToEndIntegrationTests {
     }
 
     private String bearer(String token) { return "Bearer " + token; }
+    private String streetResult() {
+        return """
+                [{"lat":"-23.5614","lon":"-46.6559","address":{"road":"Avenida Paulista",
+                "city":"São Paulo","state":"São Paulo","ISO3166-2-lvl4":"BR-SP","country_code":"br"}}]
+                """;
+    }
+    private String neighborhoodResult() {
+        return """
+                [{"lat":"-23.5600","lon":"-46.6500","address":{"suburb":"Bela Vista",
+                "city":"São Paulo","state":"São Paulo","ISO3166-2-lvl4":"BR-SP","country_code":"br"}}]
+                """;
+    }
+    private String postalCodeResult(String postalCode) {
+        return """
+                [{"lat":"-23.5600","lon":"-46.6500","address":{"postcode":"%s",
+                "city":"São Paulo","state":"São Paulo","ISO3166-2-lvl4":"BR-SP","country_code":"br"}}]
+                """.formatted(postalCode);
+    }
     private double timerCount(String outcome) {
         Timer timer = meterRegistry.find("geocoding.duration").tag("outcome", outcome).timer();
         return timer == null ? 0 : timer.count();

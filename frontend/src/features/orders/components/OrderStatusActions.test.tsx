@@ -37,6 +37,9 @@ const baseOrder: Order = {
   updatedAt: '2026-10-19T12:00:00Z',
   coordinates: null,
   geocodingStatus: 'PENDING',
+  coordinateSource: null,
+  suggestedCoordinates: null,
+  geocodingSuggestionLevel: null,
 }
 
 function renderActions(status: OrderStatus) {

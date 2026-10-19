@@ -4,8 +4,10 @@ import com.foody.backend.orders.api.dto.CreateOrderRequest;
 import com.foody.backend.orders.api.dto.OrderResponse;
 import com.foody.backend.orders.api.dto.OrderStatusHistoryResponse;
 import com.foody.backend.orders.api.dto.UpdateOrderStatusRequest;
+import com.foody.backend.orders.api.dto.SetManualLocationRequest;
 import com.foody.backend.orders.application.OrderService;
 import com.foody.backend.orders.domain.OrderStatus;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
@@ -38,6 +40,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class OrderController {
     private final OrderService orders;
 
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2",
+            justification = "OrderService is a Spring-managed shared collaborator intentionally retained by this singleton.")
     public OrderController(OrderService orders) { this.orders = orders; }
 
     @PostMapping
@@ -101,6 +105,16 @@ public class OrderController {
     public ResponseEntity<Void> geocode(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         orders.requestGeocoding(customerId(jwt), id);
         return ResponseEntity.accepted().build();
+    }
+
+    @PatchMapping("/{id}/location")
+    @Operation(summary = "Confirm a delivery point manually", description = "Stores user-confirmed coordinates without changing the original postal address. Later asynchronous geocoding results cannot replace a manual point.")
+    @ApiResponse(responseCode = "200", description = "Manual location saved")
+    @ApiResponse(responseCode = "400", description = "Invalid coordinates")
+    @ApiResponse(responseCode = "404", description = "Order not found")
+    public OrderResponse setManualLocation(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+                                           @Valid @RequestBody SetManualLocationRequest request) {
+        return orders.setManualLocation(customerId(jwt), id, request.latitude(), request.longitude());
     }
 
     private UUID customerId(Jwt jwt) { return UUID.fromString(jwt.getSubject()); }

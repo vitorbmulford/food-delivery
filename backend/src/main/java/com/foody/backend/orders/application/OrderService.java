@@ -19,8 +19,10 @@ import com.foody.backend.orders.infrastructure.persistence.OrderRepository;
 import com.foody.backend.orders.infrastructure.persistence.OrderStatusHistoryRepository;
 import com.foody.backend.geocoding.application.GeocodingDispatcher;
 import com.foody.backend.geocoding.application.OrderGeocodingRequestedEvent;
+import com.foody.backend.geocoding.domain.GeoCoordinates;
 import com.foody.backend.orders.application.event.OrderStatusChangedEvent;
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -116,6 +118,13 @@ public class OrderService {
         return geocoding.schedule(id);
     }
 
+    @Transactional
+    public OrderResponse setManualLocation(UUID customerId, UUID id, BigDecimal latitude, BigDecimal longitude) {
+        Order order = findOwned(id, customerId);
+        order.confirmManualCoordinates(new GeoCoordinates(latitude, longitude), Instant.now());
+        return toResponse(order);
+    }
+
     private Order findOwned(UUID id, UUID customerId) {
         return orders.findByIdAndCustomerId(id, customerId).orElseThrow(OrderNotFoundException::new);
     }
@@ -127,7 +136,10 @@ public class OrderService {
                 new DeliveryAddressResponse(address.getStreet(), address.getNumber(), address.getComplement(), address.getNeighborhood(), address.getCity(), address.getState(), address.getPostalCode()),
                 order.getTotalAmount(), order.getCreatedAt(), order.getUpdatedAt(),
                 order.getCoordinates() == null ? null : new GeoCoordinatesResponse(order.getCoordinates().latitude(), order.getCoordinates().longitude()),
-                order.getGeocodingStatus());
+                order.getGeocodingStatus(), order.getCoordinateSource(),
+                order.getSuggestedCoordinates() == null ? null
+                        : new GeoCoordinatesResponse(order.getSuggestedCoordinates().latitude(), order.getSuggestedCoordinates().longitude()),
+                order.getGeocodingSuggestionLevel());
     }
 
     private OrderStatusHistoryResponse toHistoryResponse(OrderStatusHistory event) {

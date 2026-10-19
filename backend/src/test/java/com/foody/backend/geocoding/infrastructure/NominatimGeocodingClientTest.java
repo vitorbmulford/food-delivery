@@ -1,8 +1,10 @@
 package com.foody.backend.geocoding.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.foody.backend.geocoding.domain.GeocodingStatus;
+import com.foody.backend.geocoding.domain.GeocodingSuggestionLevel;
 import com.foody.backend.orders.domain.DeliveryAddress;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -21,6 +23,7 @@ import org.junit.jupiter.api.Test;
 
 class NominatimGeocodingClientTest {
     private final AtomicReference<Response> response = new AtomicReference<>();
+    private final AtomicReference<String> requestQuery = new AtomicReference<>();
     private HttpServer server;
     private NominatimGeocodingClient client;
 
@@ -51,11 +54,78 @@ class NominatimGeocodingClientTest {
     }
 
     @Test
+    void returnsStreetSuggestionOnlyWhenStreetCityStateAndCountryMatch() {
+        response.set(new Response(200, """
+                [{"lat":"-23.5614","lon":"-46.6559","address":{"road":"Avenida Paulista",
+                "city":"São Paulo","state":"São Paulo","ISO3166-2-lvl4":"BR-SP","country_code":"br"}}]
+                """, 0));
+
+        var result = client.geocodeStreetSuggestionOrThrow(address());
+
+        assertThat(result.status()).isEqualTo(GeocodingStatus.NOT_FOUND);
+        assertThat(result.suggestionLevel()).isEqualTo(GeocodingSuggestionLevel.STREET);
+        assertThat(result.suggestedCoordinates().latitude()).isEqualByComparingTo("-23.5614");
+        assertThat(requestQuery.get()).contains("limit=5", "addressdetails=1", "countrycodes=br")
+                .doesNotContain("1578", "01310200");
+    }
+
+    @Test
+    void rejectsStreetSuggestionFromAnIncompatibleCityOrStreet() {
+        response.set(new Response(200, """
+                [{"lat":"-22.9","lon":"-43.2","address":{"road":"Avenida Paulista",
+                "city":"Rio de Janeiro","state":"Rio de Janeiro","ISO3166-2-lvl4":"BR-RJ","country_code":"br"}},
+                {"lat":"-23.5","lon":"-46.6","address":{"road":"Rua Augusta",
+                "city":"São Paulo","state":"São Paulo","ISO3166-2-lvl4":"BR-SP","country_code":"br"}}]
+                """, 0));
+
+        var result = client.geocodeStreetSuggestionOrThrow(address());
+
+        assertThat(result.status()).isEqualTo(GeocodingStatus.NOT_FOUND);
+        assertThat(result.suggestedCoordinates()).isNull();
+    }
+
+    @Test
+    void validatesNeighborhoodAndPostalCodeSuggestionsAgainstTheExpectedRegion() {
+        response.set(new Response(200, """
+                [{"lat":"-23.56","lon":"-46.65","address":{"suburb":"Bela Vista",
+                "city":"São Paulo","state":"São Paulo","ISO3166-2-lvl4":"BR-SP","country_code":"br"}}]
+                """, 0));
+        assertThat(client.geocodeNeighborhoodSuggestionOrThrow(address()).suggestionLevel())
+                .isEqualTo(GeocodingSuggestionLevel.NEIGHBORHOOD);
+
+        response.set(new Response(200, """
+                [{"lat":"-23.56","lon":"-46.65","address":{"postcode":"99999-999",
+                "city":"São Paulo","state":"São Paulo","ISO3166-2-lvl4":"BR-SP","country_code":"br"}}]
+                """, 0));
+        assertThat(client.geocodePostalCodeSuggestionOrThrow(address()).suggestedCoordinates()).isNull();
+
+        response.set(new Response(200, """
+                [{"lat":"-23.56","lon":"-46.65","address":{"postcode":"01310-200",
+                "city":"São Paulo","state":"São Paulo","ISO3166-2-lvl4":"BR-SP","country_code":"br"}}]
+                """, 0));
+        assertThat(client.geocodePostalCodeSuggestionOrThrow(address()).suggestionLevel())
+                .isEqualTo(GeocodingSuggestionLevel.POSTAL_CODE);
+    }
+
+    @Test
     void returnsFailedForRateLimitAndServerErrors() {
         response.set(new Response(429, "too many requests", 0));
         assertThat(client.geocode(address()).status()).isEqualTo(GeocodingStatus.FAILED);
         response.set(new Response(500, "server error", 0));
         assertThat(client.geocode(address()).status()).isEqualTo(GeocodingStatus.FAILED);
+    }
+
+    @Test
+    void exposesPermanentProviderStatusForOperationalDiagnosis() {
+        response.set(new Response(403, "access denied", 0));
+
+        assertThatThrownBy(() -> client.geocodeOrThrow(address()))
+                .isInstanceOf(GeocodingProviderException.class)
+                .satisfies(exception -> {
+                    GeocodingProviderException provider = (GeocodingProviderException) exception;
+                    assertThat(provider.status()).isEqualTo(403);
+                    assertThat(provider.isTransient()).isFalse();
+                });
     }
 
     @Test
@@ -100,6 +170,7 @@ class NominatimGeocodingClientTest {
     }
 
     private void respond(HttpExchange exchange) throws IOException {
+        requestQuery.set(exchange.getRequestURI().getRawQuery());
         Response current = response.get();
         try {
             Thread.sleep(current.delayMillis());

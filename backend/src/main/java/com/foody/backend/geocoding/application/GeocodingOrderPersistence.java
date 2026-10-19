@@ -25,6 +25,6 @@ class GeocodingOrderPersistence {
 
     @Transactional
     public void apply(UUID orderId, GeocodingResult result) {
-        orders.findById(orderId).ifPresent(order -> order.applyGeocoding(result.status(), result.coordinates()));
+        orders.findById(orderId).ifPresent(order -> order.applyGeocoding(result));
     }
 }
