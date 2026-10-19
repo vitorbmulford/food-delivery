@@ -72,6 +72,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       await logoutSession()
       setExplicitLogoutMarker(false)
     } catch {
+      // Local session state is cleared in finally even if the server is unreachable.
     } finally {
       setAccessToken(null)
       setHasToken(false)

@@ -2,11 +2,17 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { OrderStatusActions } from './OrderStatusActions'
+import { OrderStatusTimeline } from './OrderStatusTimeline'
+import { orderKeys } from '../hooks/useOrders'
 import type { Order, OrderStatus } from '../types/order'
 
-const { updateOrderStatus } = vi.hoisted(() => ({ updateOrderStatus: vi.fn() }))
+const { updateOrderStatus, getOrderHistory } = vi.hoisted(() => ({
+  updateOrderStatus: vi.fn(),
+  getOrderHistory: vi.fn(),
+}))
 vi.mock('../api/ordersApi', () => ({
   updateOrderStatus,
+  getOrderHistory,
   listOrders: vi.fn(),
   getOrder: vi.fn(),
   createOrder: vi.fn(),
@@ -77,7 +83,9 @@ describe('ações de status', () => {
       </QueryClientProvider>,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Saiu para entrega' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('O status mudou em outra operação.')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'O pedido foi alterado em outra operação.',
+    )
     rerender(
       <QueryClientProvider client={new QueryClient()}>
         <OrderStatusActions order={{ ...baseOrder, status: 'ENTREGUE' }} />
@@ -85,5 +93,46 @@ describe('ações de status', () => {
     )
     expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Iniciar preparo' })).not.toBeInTheDocument()
+  })
+
+  it('reconsulta a timeline após atualizar o status com sucesso', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    const initialHistory = [
+      {
+        id: 'event-1',
+        previousStatus: null,
+        newStatus: 'RECEBIDO',
+        changedAt: '2026-10-19T12:00:00Z',
+        changedBy: null,
+      },
+    ]
+    getOrderHistory.mockResolvedValueOnce(initialHistory).mockResolvedValueOnce([
+      ...initialHistory,
+      {
+        id: 'event-2',
+        previousStatus: 'RECEBIDO',
+        newStatus: 'EM_PREPARO',
+        changedAt: '2026-10-19T12:10:00Z',
+        changedBy: null,
+      },
+    ])
+    updateOrderStatus.mockResolvedValue({ ...baseOrder, status: 'EM_PREPARO' })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <>
+          <OrderStatusActions order={baseOrder} />
+          <OrderStatusTimeline orderId={baseOrder.id} />
+        </>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByText('Pedido recebido')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar preparo' }))
+    expect(await screen.findByText('Recebido → Em preparo')).toBeInTheDocument()
+    expect(getOrderHistory).toHaveBeenCalledTimes(2)
+    expect(queryClient.getQueryState(orderKeys.history(baseOrder.id))?.isInvalidated).toBe(false)
   })
 })

@@ -1,18 +1,12 @@
 import { Alert, Box, Button, Divider, Paper, Skeleton, Stack, Typography } from '@mui/material'
-import {
-  ArrowLeft,
-  CalendarClock,
-  CheckCircle2,
-  CircleX,
-  MapPin,
-  Package,
-  ReceiptText,
-  UserRound,
-} from 'lucide-react'
+import { ArrowLeft, CalendarClock, MapPin, Package, ReceiptText, UserRound } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router'
+import { useRef } from 'react'
 import { PageHeading } from '../components/ui/PageHeading'
 import { OrderStatusActions } from '../features/orders/components/OrderStatusActions'
 import { OrderStatusChip } from '../features/orders/components/OrderStatusChip'
+import { OrderProgress } from '../features/orders/components/OrderProgress'
+import { OrderStatusTimeline } from '../features/orders/components/OrderStatusTimeline'
 import { useOrder } from '../features/orders/hooks/useOrders'
 import {
   formatCurrency,
@@ -65,9 +59,17 @@ function DetailPaper({ children }: { children: React.ReactNode }) {
 
 export function OrderDetailPage() {
   const { id = '' } = useParams()
+  const isValidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
   const navigate = useNavigate()
   const location = useLocation()
-  const query = useOrder(id)
+  const historySectionRef = useRef<HTMLDivElement>(null)
+  const scrollToHistory = () => {
+    const section = historySectionRef.current
+    if (!section) return
+    section.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+    section.focus({ preventScroll: true })
+  }
+  const query = useOrder(id, isValidId)
   const created = Boolean((location.state as { created?: boolean } | null)?.created)
 
   return (
@@ -83,12 +85,24 @@ export function OrderDetailPage() {
         title="Detalhes do pedido"
         description="Acompanhe os itens, a entrega e o andamento do pedido."
       />
+      {!isValidId && (
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" onClick={() => navigate('/orders')}>
+              Ver pedidos
+            </Button>
+          }
+        >
+          O identificador deste pedido não é válido.
+        </Alert>
+      )}
       {created && (
         <Alert severity="success" sx={{ mb: 2.5 }}>
           Pedido criado com sucesso.
         </Alert>
       )}
-      {query.isLoading && (
+      {isValidId && query.isLoading && (
         <Stack spacing={2}>
           <Typography variant="caption" color="text.secondary">
             Identificador: <span>{id}</span>
@@ -97,7 +111,7 @@ export function OrderDetailPage() {
           <Skeleton variant="rounded" height={280} />
         </Stack>
       )}
-      {query.isError && (
+      {isValidId && query.isError && (
         <Alert
           severity="error"
           action={
@@ -109,26 +123,36 @@ export function OrderDetailPage() {
           {getOrderErrorMessage(query.error, 'Não foi possível carregar este pedido.')}
         </Alert>
       )}
-      {query.data && (
+      {isValidId && query.data && (
         <Stack spacing={2.5}>
           <Paper
+            component="section"
+            aria-label="Cabeçalho do pedido"
             variant="outlined"
             sx={(theme) => ({
               background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.primary.light} 180%)`,
               overflow: 'hidden',
-              p: { xs: 2, sm: 2.5 },
+              p: { xs: 2.5, sm: 3 },
             })}
           >
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
               spacing={2}
-              sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
+              sx={{
+                alignItems: { xs: 'stretch', sm: 'flex-start' },
+                justifyContent: 'space-between',
+              }}
             >
-              <Stack spacing={0.75}>
-                <Typography variant="overline" color="text.secondary">
-                  Pedido #{query.data.id.slice(0, 8)}
+              <Stack spacing={1.5} sx={{ alignItems: 'flex-start', minWidth: 0 }}>
+                <Typography
+                  variant="overline"
+                  color="text.secondary"
+                  sx={{ overflowWrap: 'anywhere' }}
+                >
+                  Pedido {query.data.id}
                 </Typography>
                 <Typography variant="h2">Pedido de {query.data.customer.name}</Typography>
+                <OrderStatusActions order={query.data} compact />
                 <Stack
                   direction="row"
                   spacing={0.75}
@@ -140,9 +164,17 @@ export function OrderDetailPage() {
                   </Typography>
                 </Stack>
               </Stack>
-              <OrderStatusChip status={query.data.status} />
+              <Stack sx={{ alignItems: { xs: 'flex-end', sm: 'flex-start' }, flexShrink: 0 }}>
+                <OrderStatusChip status={query.data.status} />
+              </Stack>
             </Stack>
           </Paper>
+
+          <DetailPaper>
+            <Stack spacing={1}>
+              <OrderProgress status={query.data.status} onViewHistory={scrollToHistory} />
+            </Stack>
+          </DetailPaper>
 
           <Box
             sx={{
@@ -222,9 +254,12 @@ export function OrderDetailPage() {
                   />
                   <Divider />
                   <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
-                    <Typography color="text.secondary">Subtotal</Typography>
+                    <Typography color="text.secondary">Total dos itens</Typography>
                     <Typography>{formatCurrency(query.data.totalAmount)}</Typography>
                   </Stack>
+                  <Typography variant="caption" color="text.secondary">
+                    Atualizado em {formatOrderDate(query.data.updatedAt)}
+                  </Typography>
                   <Stack
                     direction="row"
                     sx={{ alignItems: 'baseline', justifyContent: 'space-between' }}
@@ -252,56 +287,20 @@ export function OrderDetailPage() {
                   </Box>
                 </Stack>
               </DetailPaper>
-
-              {query.data.status === 'ENTREGUE' || query.data.status === 'CANCELADO' ? (
-                <DetailPaper>
-                  <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
-                    <Box
-                      sx={{
-                        alignItems: 'center',
-                        bgcolor:
-                          query.data.status === 'ENTREGUE'
-                            ? 'rgba(74, 222, 128, 0.16)'
-                            : 'rgba(251, 113, 133, 0.16)',
-                        borderRadius: '50%',
-                        color: query.data.status === 'ENTREGUE' ? '#4ade80' : '#fb7185',
-                        display: 'flex',
-                        flexShrink: 0,
-                        height: 36,
-                        justifyContent: 'center',
-                        width: 36,
-                      }}
-                    >
-                      {query.data.status === 'ENTREGUE' ? (
-                        <CheckCircle2 size={20} aria-hidden="true" />
-                      ) : (
-                        <CircleX size={20} aria-hidden="true" />
-                      )}
-                    </Box>
-                    <Box>
-                      <Typography variant="h3">
-                        {query.data.status === 'ENTREGUE' ? 'Pedido entregue' : 'Pedido cancelado'}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                        {query.data.status === 'ENTREGUE'
-                          ? 'Este pedido foi concluído e não possui mais ações pendentes.'
-                          : 'Este pedido foi encerrado e não possui mais ações pendentes.'}
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </DetailPaper>
-              ) : (
-                <DetailPaper>
-                  <Stack spacing={1.5}>
-                    <Typography variant="h3">Atualizar status</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Avance o pedido conforme a entrega é preparada e concluída.
-                    </Typography>
-                    <OrderStatusActions order={query.data} />
-                  </Stack>
-                </DetailPaper>
-              )}
             </Stack>
+          </Box>
+          <Box
+            id="order-status-history"
+            ref={historySectionRef}
+            tabIndex={-1}
+            sx={{
+              scrollMarginTop: 3,
+              '&:focus': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+            }}
+          >
+            <DetailPaper>
+              <OrderStatusTimeline orderId={query.data.id} />
+            </DetailPaper>
           </Box>
         </Stack>
       )}
