@@ -4,6 +4,7 @@ import {
   ChevronRight,
   ClipboardList,
   LayoutDashboard,
+  ChartNoAxesCombined,
   LogOut,
   Moon,
   Sun,
@@ -28,6 +29,7 @@ import { useColorMode } from '../../app/theme/ColorModeContext'
 const navigation = [
   { label: 'Visão geral', to: '/dashboard', icon: LayoutDashboard },
   { label: 'Pedidos', to: '/orders', icon: ClipboardList },
+  { label: 'Insights', to: '/insights', icon: ChartNoAxesCombined },
 ]
 
 type SidebarProps = {

@@ -6,6 +6,7 @@ import com.foody.backend.auth.api.dto.LoginResponse;
 import com.foody.backend.auth.domain.AuthSession;
 import com.foody.backend.auth.infrastructure.persistence.AuthSessionRepository;
 import com.foody.backend.auth.infrastructure.security.JwtProperties;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -34,6 +35,7 @@ public class AuthenticationService {
     private final AuthSessionRepository sessions;
     private final SecureRandom secureRandom = new SecureRandom();
 
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "Authentication collaborators are Spring-managed shared components intentionally retained by this service.")
     public AuthenticationService(
             AuthenticationManager authenticationManager,
             JwtEncoder jwtEncoder,

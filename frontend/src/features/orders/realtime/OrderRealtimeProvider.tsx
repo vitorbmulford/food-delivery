@@ -66,6 +66,7 @@ export function OrderRealtimeProvider({ children }: PropsWithChildren) {
       if (!event) return
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: orderKeys.dashboards() }),
         queryClient.invalidateQueries({ queryKey: orderKeys.detail(event.orderId), exact: true }),
         queryClient.invalidateQueries({ queryKey: orderKeys.history(event.orderId), exact: true }),
       ])

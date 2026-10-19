@@ -3,6 +3,7 @@ import { useRef } from 'react'
 import {
   createOrder,
   getOrder,
+  getDashboard,
   getOrderHistory,
   listOrders,
   requestOrderGeocoding,
@@ -17,6 +18,17 @@ export const orderKeys = {
   list: (filters: OrderFilters) => [...orderKeys.lists(), filters] as const,
   detail: (id: string) => [...orderKeys.all, 'detail', id] as const,
   history: (id: string) => [...orderKeys.all, 'history', id] as const,
+  dashboards: () => [...orderKeys.all, 'dashboard'] as const,
+  dashboard: (from: string, to: string) => [...orderKeys.dashboards(), from, to] as const,
+}
+
+export function useDashboard(from: string, to: string) {
+  return useQuery({
+    queryKey: orderKeys.dashboard(from, to),
+    queryFn: () => getDashboard(from, to),
+    enabled: Boolean(from && to),
+    placeholderData: (previousData) => previousData,
+  })
 }
 
 export function useOrderHistory(id: string, enabled = true) {
@@ -69,7 +81,10 @@ export function useSetManualOrderLocation() {
     }) => setManualOrderLocation(id, coordinates),
     onSuccess: (order) => {
       queryClient.setQueryData(orderKeys.detail(order.id), order)
-      return queryClient.invalidateQueries({ queryKey: orderKeys.lists() })
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: orderKeys.dashboards() }),
+      ])
     },
   })
 }
@@ -80,7 +95,10 @@ export function useCreateOrder() {
     mutationFn: (input: CreateOrderInput) => createOrder(input),
     onSuccess: (order) => {
       queryClient.setQueryData(orderKeys.detail(order.id), order)
-      return queryClient.invalidateQueries({ queryKey: orderKeys.lists() })
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: orderKeys.dashboards() }),
+      ])
     },
   })
 }
@@ -95,6 +113,7 @@ export function useUpdateOrderStatus() {
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: orderKeys.history(order.id) }),
         queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: orderKeys.dashboards() }),
       ])
     },
     onError: async (error, variables) => {

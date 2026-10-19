@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '../../../lib/api/client'
 import {
   createOrder,
+  getDashboard,
   getOrderHistory,
   listOrders,
   requestOrderGeocoding,
@@ -26,6 +27,16 @@ describe('API de pedidos', () => {
     await expect(listOrders({ page: 2, size: 10, status: 'EM_PREPARO' })).resolves.toEqual(page)
     expect(apiClient.get).toHaveBeenCalledWith('/api/orders', {
       params: { page: 2, size: 10, status: 'EM_PREPARO' },
+    })
+  })
+
+  it('consulta indicadores agregados com intervalo explícito', async () => {
+    const dashboard = { totalCreated: 4, deliveredInPeriod: 2, cancelledInPeriod: 0 }
+    vi.mocked(apiClient.get).mockResolvedValue({ data: dashboard })
+
+    await expect(getDashboard('2026-10-13', '2026-10-19')).resolves.toEqual(dashboard)
+    expect(apiClient.get).toHaveBeenCalledWith('/api/orders/dashboard', {
+      params: { from: '2026-10-13', to: '2026-10-19' },
     })
   })
 

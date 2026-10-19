@@ -2,6 +2,7 @@ package com.foody.backend.shared.exception;
 
 import com.foody.backend.auth.application.EmailAlreadyRegisteredException;
 import com.foody.backend.orders.application.OrderNotFoundException;
+import com.foody.backend.orders.application.InvalidDashboardPeriodException;
 import com.foody.backend.orders.domain.InvalidOrderStatusTransitionException;
 import com.foody.backend.orders.domain.OrderValueOutOfRangeException;
 import java.time.Instant;
@@ -43,6 +44,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(OrderValueOutOfRangeException.class)
     ProblemDetail orderValueOutOfRange() {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Order amount exceeds the maximum supported value");
+    }
+
+    @ExceptionHandler(InvalidDashboardPeriodException.class)
+    ProblemDetail invalidDashboardPeriod(InvalidDashboardPeriodException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());
     }
 
     @ExceptionHandler({InvalidOrderStatusTransitionException.class, ObjectOptimisticLockingFailureException.class})

@@ -7,6 +7,14 @@ import type {
   OrderStatus,
   OrderStatusHistory,
 } from '../types/order'
+import type { DashboardData } from '../types/dashboard'
+
+export async function getDashboard(from: string, to: string) {
+  const { data } = await apiClient.get<DashboardData>('/api/orders/dashboard', {
+    params: { from, to },
+  })
+  return data
+}
 
 export async function listOrders(filters: OrderFilters) {
   const { data } = await apiClient.get<OrderPage>('/api/orders', {

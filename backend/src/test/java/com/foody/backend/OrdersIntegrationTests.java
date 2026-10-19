@@ -13,6 +13,8 @@ import com.foody.backend.geocoding.domain.GeocodingStatus;
 import com.foody.backend.orders.infrastructure.persistence.OrderRepository;
 import java.math.BigDecimal;
 import java.util.UUID;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -149,6 +151,50 @@ class OrdersIntegrationTests {
         mvc.perform(get("/api/orders/{id}/history", id)).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/orders/{id}/history", UUID.randomUUID()).header("Authorization", bearer(owner)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void dashboardAggregatesCreatedOrdersAndStatusEventsForOwnerAndPeriod() throws Exception {
+        String owner = tokenFor("dashboard-owner@example.com");
+        String stranger = tokenFor("dashboard-stranger@example.com");
+        String deliveredId = createOrder(owner);
+        String cancelledId = createOrder(owner);
+        createOrder(owner);
+        update(owner, deliveredId, "EM_PREPARO").andExpect(status().isOk());
+        update(owner, deliveredId, "SAIU_PARA_ENTREGA").andExpect(status().isOk());
+        update(owner, deliveredId, "ENTREGUE").andExpect(status().isOk());
+        update(owner, cancelledId, "CANCELADO").andExpect(status().isOk());
+
+        String today = LocalDate.now(ZoneId.of("America/Sao_Paulo")).toString();
+        mvc.perform(get("/api/orders/dashboard").header("Authorization", bearer(owner)).param("from", today).param("to", today))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCreated").value(3))
+                .andExpect(jsonPath("$.statusCounts.RECEBIDO").value(1))
+                .andExpect(jsonPath("$.statusCounts.ENTREGUE").value(1))
+                .andExpect(jsonPath("$.statusCounts.CANCELADO").value(1))
+                .andExpect(jsonPath("$.deliveredInPeriod").value(1))
+                .andExpect(jsonPath("$.cancelledInPeriod").value(1))
+                .andExpect(jsonPath("$.dailyActivity.length()").value(1))
+                .andExpect(jsonPath("$.dailyActivity[0].created").value(3))
+                .andExpect(jsonPath("$.dailyActivity[0].delivered").value(1))
+                .andExpect(jsonPath("$.dailyActivity[0].cancelled").value(1))
+                .andExpect(jsonPath("$.ongoingOrders.length()").value(1));
+        mvc.perform(get("/api/orders/dashboard").header("Authorization", bearer(stranger)).param("from", today).param("to", today))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalCreated").value(0))
+                .andExpect(jsonPath("$.deliveredInPeriod").value(0)).andExpect(jsonPath("$.ongoingOrders.length()").value(0));
+        mvc.perform(get("/api/orders/dashboard").param("from", today).param("to", today)).andExpect(status().isUnauthorized());
+        String yesterday = LocalDate.now(ZoneId.of("America/Sao_Paulo")).minusDays(1).toString();
+        mvc.perform(get("/api/orders/dashboard").header("Authorization", bearer(owner)).param("from", today).param("to", yesterday))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/orders/dashboard").header("Authorization", bearer(owner)).param("from", today).param("to", LocalDate.now(ZoneId.of("America/Sao_Paulo")).plusDays(1).toString()))
+                .andExpect(status().isBadRequest());
+    }
+
+    private String createOrder(String token) throws Exception {
+        MvcResult result = mvc.perform(post("/api/orders").header("Authorization", bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON).content(ORDER))
+                .andExpect(status().isCreated()).andReturn();
+        return JsonPath.read(result.getResponse().getContentAsString(), "$.id");
     }
 
     private org.springframework.test.web.servlet.ResultActions update(String token, String id, String state) throws Exception {

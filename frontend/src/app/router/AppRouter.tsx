@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { PublicLayout } from '../../components/layout/PublicLayout'
 import { DashboardPage } from '../../pages/DashboardPage'
+import { InsightsPage } from '../../pages/InsightsPage'
 import { CreateOrderPage } from '../../pages/CreateOrderPage'
 import { LoginPage } from '../../pages/LoginPage'
 import { NotFoundPage } from '../../pages/NotFoundPage'
@@ -23,6 +24,7 @@ export function AppRouter() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/insights" element={<InsightsPage />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/orders/new" element={<CreateOrderPage />} />
           <Route path="/orders/:id" element={<OrderDetailPage />} />
