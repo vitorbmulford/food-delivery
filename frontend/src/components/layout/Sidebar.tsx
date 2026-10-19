@@ -274,9 +274,6 @@ export function Sidebar({ collapsed, isMobile = false, onNavigate, onToggle }: S
           slotProps={{
             paper: {
               sx: {
-                // The expanded drawer has 16px of padding on each side (256px - 32px).
-                // Keeping the menu at that inner width lets its centered anchor stay
-                // entirely within the sidebar instead of spilling into the content area.
                 width: 224,
                 minWidth: 0,
                 maxWidth: 'calc(100vw - 32px)',

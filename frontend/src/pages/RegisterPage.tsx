@@ -37,7 +37,6 @@ export function RegisterPage() {
   const submit = handleSubmit(async ({ name, email, password }) => {
     setSubmitError('')
     try {
-      // Confirmation is UI-only; the backend RegisterRequest accepts name, email and password.
       await registerUser({ name, email, password })
       navigate('/login', { replace: true, state: { registrationSuccess: true } })
     } catch (error) {

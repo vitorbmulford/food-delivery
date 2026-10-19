@@ -1,12 +1,12 @@
 # Foody Delivery — Frontend
 
-Aplicação web para a gestão da operação de delivery, construída com React, TypeScript e Vite. A autenticação integra-se ao backend Spring Boot; pedidos e geocodificação permanecem fora do escopo desta etapa.
+Aplicação web para a gestão da operação de delivery, construída com React, TypeScript e Vite. A autenticação e os pedidos integram-se ao backend Spring Boot; geocodificação permanece fora do escopo da interface.
 
 ## Requisitos
 
 - Node.js 20.19+ ou 22.12+
 - npm
-- Backend disponível em `http://localhost:8080` para login, cadastro e consulta do perfil
+- Backend disponível em `http://localhost:8080` para login, cadastro, perfil e pedidos
 
 ## Instalação e execução local
 
@@ -35,7 +35,7 @@ O backend precisa permitir a origem do frontend por `FRONTEND_ORIGIN` (localment
 - Cadastro envia `name`, `email` e `password` para `POST /api/auth/register`. O backend retorna `201` com o perfil, sem JWT; após sucesso, a pessoa entra pela tela de login.
 - Login envia `email` e `password` para `POST /api/auth/login`. O backend retorna `accessToken`, `tokenType` e `expiresIn`, e cria uma sessão persistente em cookie `HttpOnly`.
 - Ao recarregar a página, o frontend usa o cookie para renovar o token sem pedir novo login. O token de acesso é renovado automaticamente quando expira; somente o logout revoga a sessão.
-- As rotas `/dashboard`, `/orders` e `/orders/:id` exigem sessão. Após login, o usuário retorna à rota que tentou abrir. As rotas públicas levam usuários autenticados ao dashboard.
+- As rotas `/dashboard`, `/orders`, `/orders/new` e `/orders/:id` exigem sessão. Após login, o usuário retorna à rota que tentou abrir. As rotas públicas levam usuários autenticados ao dashboard.
 - O perfil é obtido de `GET /api/users/me`; nome e e-mail aparecem no menu de perfil da barra lateral recolhível.
 - Logout, resposta `401` de uma chamada privada ou falha na consulta de `/me` remove a sessão e os dados em cache.
 
@@ -78,10 +78,11 @@ src/
 - `/register`
 - `/dashboard`
 - `/orders`
+- `/orders/new`
 - `/orders/:id`
 
-Endereços desconhecidos exibem a página de fallback. O dashboard permanece sem indicadores fictícios; pedidos ainda são telas fora do escopo desta branch.
+Endereços desconhecidos exibem a página de fallback. `/orders` lista pedidos reais com paginação e filtro por status sincronizados à URL. `/orders/new` cria pedidos por formulário validado e `/orders/:id` apresenta um resumo consultado na API. As transições de status seguem as regras do backend, que calcula o total. O dashboard permanece sem indicadores fictícios.
 
 ## Testes
 
-Execute `npm run test:run` para rodar os testes automatizados sem depender de um backend externo.
+Execute `npm run test:run` para rodar os testes automatizados sem depender de um backend externo. Os testes de pedidos simulam respostas da API; a integração ponta a ponta exige backend, banco e credenciais disponíveis.

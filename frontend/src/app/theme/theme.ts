@@ -29,7 +29,11 @@ export function createAppTheme(mode: PaletteMode) {
       },
       text: { primary: isDark ? '#f1f3f4' : ink, secondary: isDark ? '#b0b6ba' : '#75696a' },
       divider: isDark ? '#3b4044' : '#eee5e5',
-      success: { main: brandRedDark },
+      success: {
+        main: isDark ? '#aeb4b8' : brandRedDark,
+        light: isDark ? '#d7dbde' : '#ff7373',
+        dark: isDark ? '#c4c9cc' : '#b30000',
+      },
       warning: { main: '#c87b31' },
       error: { main: brandRedDark },
     },

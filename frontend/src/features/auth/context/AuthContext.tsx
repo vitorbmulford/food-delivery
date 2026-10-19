@@ -72,7 +72,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
       await logoutSession()
       setExplicitLogoutMarker(false)
     } catch {
-      // Clear the local session even when the API is unavailable.
     } finally {
       setAccessToken(null)
       setHasToken(false)
