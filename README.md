@@ -1,122 +1,192 @@
 # Foody Delivery
 
-Backend de um desafio técnico para uma aplicação simplificada de gerenciamento e acompanhamento de pedidos de delivery.
+O **Foody Delivery** é uma aplicação web para gerenciar e acompanhar pedidos de delivery, desenvolvida com Java, Spring Boot, React e PostgreSQL.
 
-## Stack
+A solução atende ao núcleo do desafio técnico **Mini Rastreador de Pedidos**: cadastro e autenticação, criação de pedidos com cliente, itens e endereço, consulta de pedidos e atualização de status. O cliente do pedido é independente da conta do operador que o registra.
 
-- Java 21 e Spring Boot 4.1.1
-- Spring MVC, Security, OAuth2 Resource Server, Data JPA e WebSocket
-- PostgreSQL 17, Flyway, Bean Validation e Springdoc OpenAPI
-- JUnit 5, Spring Security Test, Testcontainers, JaCoCo e SpotBugs
-- Docker Compose
+Além desse fluxo, o projeto inclui recursos complementares de operação e acompanhamento, como notificações em tempo real, geocodificação e mapa, Dashboard, Insights e histórico de status. Essas extensões permitem explorar integrações, rastreabilidade, segurança e resiliência em cenários além do MVP.
 
-## Estrutura
+## O que foi solicitado e entregue
 
-```text
-food-delivery-completo/
-├── backend/                 # Aplicação Spring Boot
-├── frontend/                # Aplicação React + TypeScript + Vite
-├── compose.yaml
-├── .env.example
-└── README.md
+| Requisito | Como foi atendido |
+|---|---|
+| **Autenticação**: cadastro e login com nome, e-mail e senha; acesso autenticado | Cadastro e login com validação e senha armazenada com BCrypt. As áreas de pedidos exigem autenticação. |
+| **Backend**: API REST em Java e Spring Boot | API implementada em Java 21 e Spring Boot para autenticação, pedidos e consultas complementares. |
+| **Pedidos**: criar pedido, listar, consultar por ID e atualizar entre cinco status | Criação com dados do cliente, itens e endereço; consulta por ID; transições controladas entre os estados definidos. A listagem retorna os pedidos do operador autenticado. O enunciado diz “listar todos os pedidos”; esta implementação não oferece uma listagem global entre operadores. |
+| **Persistência**: banco de dados relacional ou tecnologia similar | PostgreSQL com JPA e migrations Flyway. |
+| **Frontend**: aplicação React para listar pedidos, exibir status e criar pedidos | Interface React com páginas de pedidos, criação, detalhes e acompanhamento do status. |
+| **Versionamento**: repositório Git com histórico de commits | Implementação mantida em repositório Git com histórico versionado. |
+
+### Operador e cliente do pedido
+
+O **operador** é o usuário autenticado responsável por registrar e acompanhar os pedidos. O **cliente** é quem receberá o pedido e não precisa ter uma conta na aplicação. A migration `V8__separate_order_customer_from_owner.sql` formaliza essa separação entre `owner_id` e os campos do cliente (`customer_name`, `customer_phone` e `customer_email`). Consultas e alterações ficam limitadas ao operador proprietário; pedidos criados antes da V8 podem não ter dados de cliente.
+
+## Além do desafio: funcionalidades complementares
+
+As extensões abaixo não eram requisitos do desafio. O fluxo central pode ser atendido por um MVP mais enxuto; esses recursos acrescentam cenários de operação, integração e qualidade, junto dos custos e limites descritos em [Decisões técnicas e trade-offs](#decisões-técnicas-e-trade-offs).
+
+### Atualizações em tempo real
+
+Quando um operador altera o status, a mudança é persistida no PostgreSQL e, após o commit, o backend publica um evento STOMP por WebSocket para o operador responsável. O frontend recebe a notificação e atualiza os dados exibidos sem polling contínuo. A API REST e o histórico persistido continuam como fonte de verdade; o broker em memória torna as notificações best effort.
+
+### Geocodificação e mapas
+
+No formulário, o ViaCEP pode preencher dados postais a partir do CEP. Depois que o pedido é salvo, uma tarefa assíncrona consulta o Nominatim, usando dados do OpenStreetMap, para sugerir coordenadas. A busca tenta variações do endereço; o operador confirma a localização no mapa Leaflet ou seleciona outro ponto. Isso reduz digitação e ajuda a revisar o local de entrega sem confundir uma sugestão aproximada com uma confirmação. Os serviços são externos e tarefas pendentes ficam em memória.
+
+### Dashboard operacional
+
+O Dashboard resume pedidos criados, distribuição por status, entregas e cancelamentos, atividade diária e pedidos recentes ou em andamento. O operador escolhe um período de até 366 dias, interpretado no fuso `America/Sao_Paulo`. Os indicadores oferecem uma visão operacional rápida e respeitam o isolamento por operador.
+
+### Insights comerciais
+
+Insights compara períodos de mesma duração e agrupa atividade por dia e hora, produtos e tempos calculados a partir do histórico. Essas consultas permitem explorar horários mais ativos, itens frequentes e tempos da operação. Os valores exibidos são os registrados nos pedidos; não representam pagamentos recebidos, faturamento confirmado ou lucro.
+
+### Histórico de pedidos
+
+O estado inicial e cada transição aprovada são gravados no banco com estado anterior e novo, horário e operador, na mesma transação que atualiza o pedido. A linha do tempo permite reconstruir a sequência de eventos e identificar quem realizou cada mudança, em vez de depender apenas do status atual.
+
+### Busca e paginação
+
+Na listagem, é possível buscar parcialmente por nome ou e-mail, por telefone ou por UUID, filtrar por status e percorrer páginas de até 50 resultados. Esses critérios ajudam a localizar um pedido em listas maiores; todos os resultados continuam limitados ao operador autenticado.
+
+### Segurança e integridade
+
+Spring Security e JWT protegem as rotas, e consultas de pedidos são escopadas ao operador autenticado. As regras de domínio validam as transições de status; o controle otimista com `@Version` detecta atualizações concorrentes. Assim, acessos cruzados, mudanças inválidas e sobrescritas silenciosas são rejeitados; um conflito retorna `409 Conflict` e exige consultar novamente o pedido.
+
+### Resiliência e observabilidade
+
+Para a geocodificação, chamadas ao Nominatim têm timeout e limite local de uma por segundo. Falhas transitórias podem ser repetidas com backoff e jitter, respeitando `Retry-After`; o circuit breaker interrompe chamadas quando há falhas recorrentes. Isso reduz pressão sobre o provedor e não afeta pedidos já gravados. A API também oferece respostas estruturadas, `X-Correlation-ID`, Actuator e logs JSON em produção. O retry ocupa o único worker assíncrono enquanto espera; métricas e limitadores não são compartilhados entre instâncias, e não há serviço externo configurado para dashboards ou alertas.
+
+### Qualidade e execução
+
+JUnit e Testcontainers exercitam o backend com PostgreSQL; Vitest e Testing Library cobrem o frontend. JaCoCo gera relatórios de cobertura e SpotBugs analisa o backend. Docker Compose reúne banco, API e interface, enquanto Nginx serve a SPA e encaminha `/api` e `/ws`. Isso simplifica a execução integrada e a verificação dos fluxos; os testes de integração precisam de Docker e não há meta mínima de cobertura.
+
+## Abordagem de engenharia e qualidade
+
+No **backend**, Java 21 e Spring Boot organizam a API REST e as regras do domínio. Spring Data JPA e PostgreSQL cuidam da persistência relacional, e Flyway versiona a evolução do schema. Essa separação conecta os fluxos de pedidos a dados persistidos e consultáveis.
+
+No **frontend**, React com TypeScript estrutura páginas e componentes; Material UI fornece os componentes visuais, Vite cuida do desenvolvimento e build, e TanStack Query gerencia consultas e atualização de dados. A interface conversa com o backend por REST e também recebe eventos STOMP. ViaCEP, Nominatim, OpenStreetMap e Leaflet compõem os fluxos de endereço e localização descritos acima.
+
+A qualidade é apoiada por testes unitários e de integração com JUnit e Testcontainers, testes de interface com Vitest e Testing Library, análise estática com SpotBugs, relatórios JaCoCo e lint do frontend. Docker Compose e Nginx oferecem uma execução integrada. Os comandos e resultados registrados estão em [Testes e validação](#testes-e-validação); as limitações e trade-offs de sessão, mecanismos em memória e serviços externos estão detalhados adiante.
+
+O Codex foi utilizado como ferramenta de apoio ao desenvolvimento e à revisão. As sugestões foram avaliadas em relação ao código e aos resultados de validação; decisões técnicas e aprovação do conteúdo permaneceram sob responsabilidade do desenvolvedor.
+
+## Arquitetura
+
+```mermaid
+flowchart LR
+    Browser[React no navegador] -->|HTTP /api| Nginx[Nginx]
+    Browser -->|WebSocket /ws STOMP| Nginx
+    Nginx -->|REST e WebSocket| Backend[Spring Boot]
+    Backend -->|JPA e Flyway| DB[(PostgreSQL)]
+    Backend -->|geocodificação assíncrona| Nominatim[Nominatim / OpenStreetMap]
+    Browser -->|consulta de CEP| ViaCEP[ViaCEP]
+    Browser -->|tiles do mapa| OSM[OpenStreetMap]
 ```
 
-## Configuração do ambiente
+No fluxo principal, o navegador envia um pedido pela API REST; o backend valida os dados, calcula o total e persiste no PostgreSQL. Geocodificação é iniciada após a gravação. Eventos de status são publicados após o commit. ViaCEP e os tiles do mapa são acessados pelo navegador.
 
-O `.env.example` na raiz é a referência do ambiente integrado via Docker Compose. O Compose lê automaticamente o `.env` da raiz para interpolar `${VAR}` no `compose.yaml`; copie o exemplo e substitua `JWT_SECRET` por uma chave local gerada. Todas as opções de Nominatim, retry, circuit breaker e rate limiting declaradas no exemplo são encaminhadas ao container do backend.
+### Tecnologias
+
+- **Backend:** Java 21, Spring Boot, Spring MVC, Spring Security, OAuth2 Resource Server, Spring Data JPA, Bean Validation e Springdoc OpenAPI.
+- **Banco e schema:** PostgreSQL 17 e Flyway, com migrations `V1` a `V8`.
+- **Frontend:** React, TypeScript, Vite, React Router, TanStack Query, Axios, React Hook Form e Zod.
+- **Interface e mapas:** Material UI, Leaflet e React Leaflet.
+- **Comunicação e resiliência:** STOMP, Bucket4j e Resilience4j.
+- **Testes e análise:** JUnit 5, Testcontainers, Vitest, Testing Library, JaCoCo e SpotBugs.
+- **Execução:** Docker Compose e Nginx.
+
+## Como executar
+
+### Requisitos
+
+- Docker e Docker Compose.
+- OpenSSL para gerar o segredo JWT local.
+
+### Aplicação integrada
+
+Na raiz do repositório:
 
 ```bash
 cp .env.example .env
 openssl rand -base64 32
 ```
 
-A chave JWT deve ser texto de 32+ caracteres ou Base64 que represente pelo menos 32 bytes. Nunca versione a chave real. O `.env.example` contém apenas valores de desenvolvimento e marcadores de exemplo.
-Em produção, sirva frontend e backend via HTTPS e configure `AUTH_COOKIE_SECURE=true` para proteger o cookie persistente da sessão.
+Copie o valor gerado para `JWT_SECRET` em `.env`. Esse arquivo é ignorado pelo Git; não versione segredos reais. Em publicação HTTPS, configure `AUTH_COOKIE_SECURE=true`, as origens permitidas e os valores adequados para os serviços externos.
 
-Para executar o backend diretamente pelo IntelliJ ou Maven, inicie o PostgreSQL em Compose e mantenha o diretório de trabalho como `backend/`. O Spring Boot importa um `.env` relativo ao diretório de trabalho: nesse modo, crie `backend/.env` apenas com `JWT_SECRET` (e eventuais `SPRING_DATASOURCE_*` ou outras variáveis que queira sobrescrever). Esse arquivo local é ignorado pelo Git e não precisa duplicar o exemplo da raiz. Sem sobrescritas de banco, a aplicação usa `localhost:5432/foody_delivery`, usuário `foody` e senha `foody_local`, os mesmos padrões do Compose. Se alterar os valores `POSTGRES_*` ou `POSTGRES_PORT` na configuração da raiz, ajuste as propriedades `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD` em `backend/.env` para a execução direta: as variáveis `POSTGRES_*` são consumidas pelo Compose e não são aliases Spring.
-
-O `.env` da raiz não é importado pelo Spring quando o diretório de trabalho é `backend/`; essa separação evita depender do diretório de onde o IntelliJ/Maven é iniciado. Não é necessário criar `backend/.env.example`: as variáveis de aplicação e seus padrões estão documentados em `backend/src/main/resources/application.yml`, e os valores concretos locais ficam em arquivos ignorados.
-
-Para iniciar somente PostgreSQL:
-
-```bash
-docker compose up -d postgres
-```
-
-Para iniciar PostgreSQL, backend e frontend em containers:
+Inicie os serviços:
 
 ```bash
 docker compose up --build -d
 ```
 
-Não é necessário executar `npm install` ou `npm ci` na máquina para usar o Compose. O build multi-stage do frontend instala as dependências dentro da imagem Docker. `npm ci` é necessário apenas para executar o Vite localmente, fora dos containers.
+- Aplicação: [http://localhost:3000](http://localhost:3000)
+- Swagger: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
+- Health do frontend: [http://localhost:3000/health](http://localhost:3000/health)
 
-Abra a aplicação em `http://localhost:3000`. O Nginx serve a SPA com fallback para as rotas do React Router e encaminha `/api` e `/ws` (WebSocket Upgrade/STOMP) ao backend. O Swagger fica disponível em `http://localhost:8080/swagger-ui/index.html`. As portas publicadas podem ser alteradas por `FRONTEND_PORT`, `BACKEND_PORT` e `POSTGRES_PORT` no `.env`. O backend só fica pronto após o PostgreSQL e o healthcheck do Actuator; o frontend aguarda o backend saudável. Para encerrar os containers sem remover os dados, execute `docker compose down` (não use `-v`).
-
-O Compose requer `JWT_SECRET` local com pelo menos 32 bytes; gere um com `openssl rand -base64 32` e grave apenas no `.env` ignorado pelo Git. `FRONTEND_ORIGIN` aceita origens exatas separadas por vírgula; o exemplo permite a interface Docker em `localhost:3000` e o Vite em `localhost:5173`. Ao publicar, substitua pelas origens realmente usadas. Em produção HTTPS, configure `AUTH_COOKIE_SECURE=true`. O bundle usa caminhos relativos por padrão. `VITE_API_BASE_URL` só deve ser definido para uma URL pública intencional, nunca para um segredo.
-
-## Frontend
-
-O frontend React + TypeScript + Vite fica em `frontend/`. Para instalar dependências e iniciar o servidor de desenvolvimento, execute `npm ci` e `npm run dev` nesse diretório. O Vite encaminha `/api` e `/ws` ao backend local em `http://localhost:8080`; assim, cookies e STOMP permanecem same-origin no navegador. Os requisitos, variáveis de ambiente e demais scripts estão documentados em [frontend/README.md](frontend/README.md).
-
-## Autenticação
-
-- `POST /api/auth/register`: cria um usuário, normaliza o e-mail e armazena a senha com BCrypt.
-- `POST /api/auth/login`: autentica, emite JWT HS256 com issuer, UUID no subject e expiração configurável, e cria uma sessão persistente em cookie `HttpOnly`.
-- `POST /api/auth/refresh`: renova o JWT usando o cookie de sessão; `POST /api/auth/logout` revoga a sessão.
-- `GET /api/users/me`: requer `Authorization: Bearer <token>`.
-
-Senhas devem conter ao menos oito caracteres, letras maiúsculas/minúsculas, um dígito e um símbolo. O e-mail é único no PostgreSQL.
+As portas podem ser alteradas por `FRONTEND_PORT`, `BACKEND_PORT` e `POSTGRES_PORT` no `.env`. Para parar os serviços mantendo o volume do banco:
 
 ```bash
-curl -X POST http://localhost:8080/api/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"João Silva","email":"joao@example.com","password":"SenhaSegura123!"}'
-
-curl -X POST http://localhost:8080/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"joao@example.com","password":"SenhaSegura123!"}'
+docker compose down
 ```
 
-No Swagger, clique em **Authorize** e informe somente o valor de `accessToken` retornado no login para testar endpoints protegidos.
+Não use `-v` se quiser preservar os dados do PostgreSQL.
 
-## Maven
+### Frontend em desenvolvimento
 
-No diretório `backend/`:
+Com o backend disponível em `http://localhost:8080`, no diretório `frontend/`:
 
 ```bash
-./mvnw clean verify
+npm ci
+npm run dev
 ```
 
-O comando executa testes, gera JaCoCo e roda SpotBugs. Testes de integração usam PostgreSQL em Testcontainers e exigem Docker.
+O Vite encaminha `/api` e `/ws` ao backend local. `VITE_API_BASE_URL` é vazio por padrão; `VITE_DEMO_MODE=true` usa dados simulados de login, pedidos, Dashboard e Insights, sem autenticação ou persistência reais.
 
-## Pedidos
+## Como utilizar
 
-Foody Delivery é uma plataforma de gestão: o usuário autenticado é o **operador** que possui e administra os pedidos; o **cliente** é externo, não possui login e seus dados são um snapshot histórico do pedido. O endereço persistido é o endereço de entrega do cliente. O isolamento, Dashboard, Insights, histórico, geocodificação e eventos privados continuam baseados exclusivamente no operador do JWT.
+1. Cadastre-se em `/register` com nome, e-mail e senha e entre em `/login`.
+2. Em **Novo pedido**, informe cliente, itens e endereço. O CEP pode preencher parte do endereço via ViaCEP.
+3. Em `/orders`, consulte seus pedidos, filtre por status ou busque por cliente, telefone, e-mail ou ID.
+4. Abra um pedido para ver seus detalhes, histórico e localização, quando disponível.
+5. Use as ações disponíveis para avançar o status. O backend valida cada transição; após conflito, consulte o pedido novamente.
+6. Dashboard e Insights apresentam agregados complementares. Valores de pedidos não significam pagamentos confirmados.
 
-Todos os endpoints de pedidos exigem `Authorization: Bearer <token>`. `POST /api/orders` recebe `customer.name`, `customer.phone` e `customer.email` opcional, além dos itens e endereço; não aceita qualquer identificador de proprietário. O telefone é armazenado somente com dígitos brasileiros (DDD + 8 ou 9 dígitos). Pedidos anteriores à mudança podem ter cliente ausente.
+## API e regras de negócio
+
+As rotas de pedidos e Insights requerem `Authorization: Bearer <accessToken>`. No Swagger, faça login e informe o `accessToken` em **Authorize**. O cookie de sessão é usado para renovar o token.
+
+| Método e rota | Acesso | Descrição |
+|---|---|---|
+| `POST /api/auth/register` | Público | Cadastra usuário. |
+| `POST /api/auth/login` | Público | Autentica e cria sessão persistente. |
+| `POST /api/auth/refresh` | Cookie de sessão | Renova o access token. |
+| `POST /api/auth/logout` | Cookie de sessão | Revoga a sessão; JWTs já emitidos permanecem válidos até expirar. |
+| `GET /api/users/me` | Autenticado | Retorna o usuário atual. |
+| `POST /api/orders` | Autenticado | Cria pedido no estado inicial `RECEBIDO`. |
+| `GET /api/orders?page=0&size=10&status=RECEBIDO&search=Maria` | Autenticado | Lista pedidos próprios, mais recentes primeiro; filtros opcionais, tamanho máximo 50. |
+| `GET /api/orders/{id}` | Autenticado | Consulta pedido próprio. Pedidos de outro operador retornam `404`. |
+| `PATCH /api/orders/{id}/status` | Autenticado | Atualiza status conforme a máquina de estados. |
+| `GET /api/orders/{id}/history` | Autenticado | Consulta histórico cronológico. |
+| `GET /api/orders/dashboard?from=AAAA-MM-DD&to=AAAA-MM-DD` | Autenticado | Consulta indicadores operacionais. |
+| `GET /api/insights?from=AAAA-MM-DD&to=AAAA-MM-DD` | Autenticado | Consulta agregados e comparativo de períodos. |
+| `POST /api/orders/{id}/geocode` | Autenticado | Agenda geocodificação; retorna `202 Accepted`. |
+| `PATCH /api/orders/{id}/location` | Autenticado | Confirma coordenadas escolhidas manualmente. |
+
+### Exemplo de criação de pedido
+
+`customer` é obrigatório; e-mail do cliente é opcional. O telefone deve conter DDD e 8 ou 9 dígitos locais; pontuação é removida na validação. Quantidade e preço unitário devem ser positivos. O backend calcula o total com `BigDecimal`.
 
 ```json
 {
-  "customer": { "name": "Maria Silva", "phone": "11999999999", "email": "maria@email.com" },
-  "items": [{ "productName": "Hambúrguer", "quantity": 2, "unitPrice": 24.9 }],
-  "deliveryAddress": { "street": "Rua Exemplo", "number": "123", "neighborhood": "Centro", "city": "São Paulo", "state": "SP", "postalCode": "01001000" }
-}
-```
-
-- `POST /api/orders`: cria um pedido e retorna `201 Created` com o header `Location`.
-- `GET /api/orders?page=0&size=10&status=RECEBIDO&search=Maria`: lista somente os pedidos do operador, do mais recente ao mais antigo. `search` encontra nome/e-mail parcialmente, telefone sem máscara ou o UUID exato. O tamanho máximo da página é 50.
-- `GET /api/orders/{id}`: consulta um pedido próprio; pedidos de terceiros retornam `404`.
-- `PATCH /api/orders/{id}/status`: atualiza o status de um pedido próprio.
-- `GET /api/orders/{id}/history`: retorna a timeline de status de um pedido próprio, do evento mais antigo ao mais recente.
-
-Exemplo de criação:
-
-```json
-{
+  "customer": {
+    "name": "Maria Silva",
+    "phone": "11999999999",
+    "email": "maria@example.com"
+  },
   "items": [
-    { "productName": "Hambúrguer Artesanal", "quantity": 2, "unitPrice": 32.9 },
-    { "productName": "Refrigerante", "quantity": 1, "unitPrice": 8.5 }
+    { "productName": "Hambúrguer Artesanal", "quantity": 2, "unitPrice": 32.90 },
+    { "productName": "Refrigerante", "quantity": 1, "unitPrice": 8.50 }
   ],
   "deliveryAddress": {
     "street": "Rua das Flores",
@@ -130,143 +200,63 @@ Exemplo de criação:
 }
 ```
 
-Itens exigem nome, quantidade maior que zero e preço unitário maior que zero; o endereço exige rua, número, bairro, cidade, UF de duas letras e CEP. Os valores monetários são calculados exclusivamente no backend com `BigDecimal`, arredondamento `HALF_UP` e duas casas decimais. O status inicial é sempre `RECEBIDO`.
-
 ### Máquina de estados
 
-| Status atual        | Próximos status permitidos       |
-| ------------------- | -------------------------------- |
-| `RECEBIDO`          | `EM_PREPARO`, `CANCELADO`        |
-| `EM_PREPARO`        | `SAIU_PARA_ENTREGA`, `CANCELADO` |
-| `SAIU_PARA_ENTREGA` | `ENTREGUE`                       |
-| `ENTREGUE`          | nenhum                           |
-| `CANCELADO`         | nenhum                           |
+| Estado atual | Próximos estados permitidos |
+|---|---|
+| `RECEBIDO` | `EM_PREPARO`, `CANCELADO` |
+| `EM_PREPARO` | `SAIU_PARA_ENTREGA`, `CANCELADO` |
+| `SAIU_PARA_ENTREGA` | `ENTREGUE` |
+| `ENTREGUE` | Nenhum; terminal |
+| `CANCELADO` | Nenhum; terminal |
 
-Transições inválidas e conflitos de atualização concorrente retornam `409 Conflict`; status ausente ou inválido retornam `400 Bad Request`. Para demonstrar o fluxo do MVP, o próprio cliente pode avançar o status. Em produção, esse endpoint deve ser limitado a restaurante, operação ou logística autorizados.
+Transição inválida ou conflito concorrente retorna `409`; dados inválidos retornam `400`. No escopo atual, o proprietário pode atualizar o status. Uma operação com perfis distintos de restaurante e logística pode exigir autorização por papel.
 
-O schema de pedidos é criado pelas migrations Flyway `V2__create_orders.sql`, `V3__add_order_geocoding.sql` e `V4__create_order_status_history.sql`, incluindo itens, endereço incorporado, índices de consulta, versão para optimistic locking e campos de geocodificação. A V5 cria as sessões persistentes de autenticação, a V6 registra a origem das coordenadas e a V7 armazena separadamente sugestões aproximadas. O Swagger documenta os endpoints em `/swagger-ui/index.html` e permite executá-los após informar o JWT em **Authorize**.
+## Testes e validação
 
-### Histórico de status
+### Comandos
 
-Cada pedido criado após a migration V4 ganha, na mesma transação, um evento inicial imutável: `previousStatus: null` e `newStatus: RECEBIDO`. Cada transição aprovada pela máquina de estados adiciona um evento com o estado anterior, o novo estado, instante UTC e o UUID do usuário autenticado. A consulta é somente leitura, ordenada por `changedAt` e, em caso de empate, por `id`.
+No diretório `backend/` (Docker é necessário para testes de integração com Testcontainers):
 
-```json
-[
-  {
-    "previousStatus": null,
-    "newStatus": "RECEBIDO",
-    "changedAt": "2026-10-16T19:30:00Z",
-    "changedBy": "<user-uuid>"
-  },
-  {
-    "previousStatus": "RECEBIDO",
-    "newStatus": "EM_PREPARO",
-    "changedAt": "2026-10-16T19:40:00Z",
-    "changedBy": "<user-uuid>"
-  }
-]
+```bash
+./mvnw clean verify
 ```
 
-O pedido e seu evento são persistidos atomicamente; uma transição inválida, acesso negado, falha de persistência ou conflito de optimistic locking faz rollback de ambos. Atualizações de geocodificação não são mudanças de status e não criam eventos. A V4 deliberadamente não cria eventos para pedidos anteriores: sem eventos originais, uma linha de baseline poderia parecer uma transição histórica comprovada. Para testar a timeline, crie um pedido, avance um status e execute `GET /api/orders/{id}/history` com o mesmo Bearer token.
+No diretório `frontend/`:
 
-## Geocodificação
-
-Ao criar um pedido, ele é persistido primeiro com `geocodingStatus: PENDING`. Após o commit no banco, uma tarefa assíncrona em memória consulta o [Nominatim / OpenStreetMap](https://operations.osmfoundation.org/policies/nominatim/) e atualiza o pedido. A criação do pedido nunca espera nem falha por causa do provedor externo.
-
-- `PENDING`: aguardando ou executando uma consulta.
-- `SUCCESS`: latitude e longitude foram encontradas e persistidas.
-- `NOT_FOUND`: o endereço completo não foi localizado; `coordinates` fica `null`. O backend tenta, em sequência, rua + cidade + UF, bairro e CEP. Uma referência só é exposta em `suggestedCoordinates` quando país, cidade, UF e o dado do nível consultado são compatíveis. Ela serve apenas para centralizar a seleção manual e nunca é confirmada como destino automaticamente.
-- `FAILED`: timeout, rede indisponível, HTTP 429/5xx ou resposta inválida; `coordinates` fica `null`.
-
-`GET /api/orders` e `GET /api/orders/{id}` incluem `coordinates`, `coordinateSource`, `geocodingStatus`, `suggestedCoordinates` e `geocodingSuggestionLevel`. O proprietário pode solicitar nova tentativa com `POST /api/orders/{id}/geocode`, que retorna `202 Accepted`, ou confirmar a seleção manual com `PATCH /api/orders/{id}/location`. A confirmação preserva o endereço postal e impede que uma resposta assíncrona posterior sobrescreva o ponto manual. Um guard em memória impede tentativas simultâneas para o mesmo pedido.
-
-```json
-{
-  "coordinates": { "latitude": -23.5614, "longitude": -46.6559 },
-  "geocodingStatus": "SUCCESS",
-  "coordinateSource": "AUTOMATIC",
-  "suggestedCoordinates": null,
-  "geocodingSuggestionLevel": null
-}
+```bash
+npm ci
+npm run test:run
+npm run lint
+npm run build
 ```
 
-Configure `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT`, `NOMINATIM_CONNECT_TIMEOUT` e `NOMINATIM_READ_TIMEOUT` no `.env`. O limite é deliberadamente de uma requisição por segundo, com `User-Agent` identificável por URL pública do projeto ou contato monitorado; endereços fictícios como `admin@example.com` podem ser bloqueados com HTTP 403. O serviço público não deve ser usado para geocodificação em massa; em produção use contato real no User-Agent e avalie provedor gerenciado ou auto-hospedado conforme o volume. Falhas do provedor registram no backend o status HTTP, se são transitórias e o `Retry-After`, mantendo detalhes internos fora da resposta ao frontend.
+O Maven executa JaCoCo e SpotBugs durante `verify`. JaCoCo gera relatório, sem limite mínimo de cobertura configurado.
 
-A fila e o guard de duplicidade são somente em memória: tentativas em espera ou em andamento não são retomadas após reinício. O endpoint de reprocessamento é a recuperação manual segura. Os testes automatizados usam um servidor HTTP local simulado e nunca dependem do Nominatim público.
+### Registro da validação técnica
 
-## Atualizações em tempo real de pedidos
+Na validação executada em **19/10/2026**, no `HEAD` `a028d16`, foram registrados: backend com 69 testes aprovados; frontend com 73 testes aprovados; lint e build de produção aprovados; SpotBugs sem achados; Docker Compose com os serviços saudáveis; e smoke tests do fluxo obrigatório aprovados. O diretório local `backend/target` ainda contém relatórios Surefire de 19/10/2026 com 69 testes e zero falhas, relatório JaCoCo e saída SpotBugs sem instâncias de bugs.
 
-O backend publica uma notificação STOMP depois que uma alteração de status é **confirmada no PostgreSQL**. Ela serve para atualizar a interface rapidamente; o histórico persistido e a API REST continuam sendo a fonte de verdade.
+Esses resultados pertencem à validação técnica daquele `HEAD`; não foram reexecutados durante esta revisão editorial. A revisão confirma que o `HEAD` permanece em `a028d16` e que a alteração local se limita ao README. O arquivo [docs/VALIDACAO_FINAL.md](docs/VALIDACAO_FINAL.md) é um registro mais antigo, de outro estado e com contagens diferentes; não é a fonte dos resultados acima.
 
-- Endpoint WebSocket nativo: `ws://localhost:8080/ws`
-- Origem permitida: o valor de `FRONTEND_ORIGIN` (por padrão, `http://localhost:5173`)
-- Broker simples em memória: `/queue`
-- Prefixo de aplicação reservado: `/app`
-- Assinatura permitida para clientes: `/user/queue/orders`
+## Decisões técnicas e trade-offs
 
-O JWT não vai na URL nem no handshake. Ele deve ser enviado no cabeçalho `Authorization` do frame STOMP `CONNECT`. O `sub` do token é o UUID do usuário e é associado ao `Principal` da sessão; por isso uma mensagem enviada a `/user/queue/orders` só é encaminhada às sessões daquele proprietário.
+- **Escopo da listagem:** cada operador vê apenas seus pedidos. Isso protege o isolamento dos dados, mas diverge da leitura literal de “listar todos os pedidos” como lista global.
+- **Sessão persistente:** o access token JWT tem expiração configurável e fica em memória no frontend; o refresh token é armazenado pelo navegador em cookie `HttpOnly`, `SameSite=Strict`, com `Max-Age` de 400 dias, e no banco fica apenas seu hash. O refresh não é rotacionado e o banco não impõe expiração do registro. Logout revoga o refresh, mas um access token já emitido continua válido até expirar.
+- **Estado em memória:** broker STOMP, rate limits, circuit breaker, limiter Nominatim e fila/controle de geocodificação são locais à instância. Reinício pode perder tarefas pendentes e múltiplas instâncias não compartilham esses estados.
+- **Proxy e rate limiting:** o limite por IP usa o endereço remoto da conexão e não lê `X-Forwarded-For`. Atrás do Nginx, vários clientes podem compartilhar o limite do endereço do proxy.
+- **Serviços externos:** ViaCEP, Nominatim e tiles do OpenStreetMap dependem de disponibilidade e políticas externas. A falha de geocodificação não desfaz o pedido; a localização pode ser confirmada manualmente. Consulte a [política de uso do Nominatim](https://operations.osmfoundation.org/policies/nominatim/).
+- **Dados analíticos:** Dashboard e Insights agregam pedidos e eventos registrados, não pagamentos, estoque ou lucro.
+- **MVP:** um fluxo mínimo com autenticação, pedidos, status e persistência poderia atender ao núcleo do enunciado. Extensões como geocodificação, STOMP e analytics ampliam manutenção e superfície operacional.
 
-```javascript
-import { Client } from "@stomp/stompjs";
+## Limitações de escopo
 
-const client = new Client({
-  brokerURL: "ws://localhost:8080/ws",
-  connectHeaders: { Authorization: `Bearer ${token}` },
-  reconnectDelay: 5000,
-});
+Não fazem parte da implementação: pagamentos, catálogo de produtos, gestão de estoque, cálculo de frete, otimização de rotas e rastreamento GPS em tempo real.
 
-client.onConnect = () => {
-  client.subscribe("/user/queue/orders", (frame) => {
-    const event = JSON.parse(frame.body);
-    // atualize a timeline/pedido local
-  });
-};
-client.activate();
-```
+## Demonstração e documentação complementar
 
-O payload é deliberadamente pequeno e não contém JWT, dados de endereço ou dados pessoais:
+Não há screenshots ou vídeo de demonstração incluídos neste repositório.
 
-```json
-{
-  "eventType": "ORDER_STATUS_CHANGED",
-  "orderId": "<uuid-do-pedido>",
-  "previousStatus": "RECEBIDO",
-  "newStatus": "EM_PREPARO",
-  "historyId": "<uuid-do-historico>",
-  "changedAt": "2026-10-16T20:00:00Z"
-}
-```
-
-O servidor rejeita `CONNECT` sem JWT válido, subscriptions diferentes de `/user/queue/orders` e todo frame `SEND` de clientes. Não há endpoint STOMP que altere pedidos: transições continuam exclusivamente em `PATCH /api/orders/{id}/status`.
-
-O evento só é emitido após o commit da transação que atualiza o pedido e cria o histórico; rollbacks, transições inválidas e acessos não autorizados não geram eventos. Como o broker é em memória, a entrega não é persistente nem exatamente uma vez. Caso o cliente desconecte, a mudança permanece salva e, após a reconexão automática do cliente, ele deve refazer `GET /api/orders` e/ou `GET /api/orders/{id}/history`.
-
-## Fora do escopo
-
-Rastreamento GPS em tempo real, rotas, cálculo de distância/frete, catálogo, estoque e pagamentos continuam fora do escopo. O frontend React e o mapa do endereço de entrega fazem parte do projeto.
-
-## Resiliência e observabilidade
-
-### Rate limiting
-
-O backend aplica Bucket4j local (em memória) antes dos handlers: `POST /api/auth/login` aceita 10 requisições por minuto por IP da conexão, `POST /api/auth/register` aceita 5 por IP e `POST /api/orders/{id}/geocode` aceita 3 por minuto por usuário autenticado. O excedente recebe `429` com `Retry-After`. Os valores `RATE_LIMIT_*` são configuráveis. Buckets ociosos expiram após 15 minutos e o cache tem limite máximo; IPs e UUIDs nunca são escritos em logs ou tags de métricas. Não é usado `X-Forwarded-For`: se a aplicação estiver atrás de proxy confiável, configure o container/proxy para substituir corretamente o endereço remoto antes de encaminhar a requisição.
-
-O limite é por instância: em múltiplas réplicas não há coordenação distribuída. Redis não foi introduzido nesta etapa.
-
-### Nominatim: retry, circuit breaker e limite global
-
-Cada chamada, inclusive retry, fallback e reprocessamento manual, passa pelo limitador global de uma requisição por segundo. A sequência progressiva faz no máximo quatro consultas quando todas retornam vazias e para no primeiro nível confiável. Cada nível tem Retry programático independente, portanto uma falha transitória tardia não repete as consultas anteriores. A política padrão é até 3 tentativas, backoff exponencial de 1 s, multiplicador 2, jitter de 20% e teto de 5 s. Timeout/rede, 429, 502, 503 e 504 podem ser repetidos; 400/401/403, endereço não encontrado e respostas válidas vazias não são. `Retry-After` numérico ou HTTP-date recebido em 429 adia o limitador global (até um orçamento seguro de um minuto), portanto uma tentativa posterior não antecipa o provedor.
-
-O breaker `nominatim` inicia fechado, abre após a janela configurável (padrão: ao menos 5 chamadas, 50% de falhas), espera 30 s e permite 2 chamadas em `HALF_OPEN`. Quando aberto não há HTTP; a geocodificação é marcada como falha sem afetar o pedido já confirmado. Os parâmetros `NOMINATIM_RETRY_*` e `NOMINATIM_CIRCUIT_*` configuram a política. Como o executor assíncrono é propositalmente unitário, o backoff bloqueia essa única tarefa durante a espera: é uma limitação MVP documentada, sem fila distribuída.
-
-Ordem operacional: rate limit de entrada → validação JWT → transação de pedido → evento após commit → executor assíncrono → circuit breaker da operação → sequência progressiva → retry do nível → limitador global Nominatim → cliente HTTP. O Circuit Breaker envolve a operação lógica inteira: um nível com retries esgotados conta como uma falha da operação, em vez de multiplicar a contagem por tentativa. Cada tentativa continua passando pelo limitador global; uma rejeição do breaker não é uma chamada HTTP.
-
-### Actuator e métricas
-
-São expostos somente `GET /actuator/health`, `/actuator/health/liveness`, `/actuator/health/readiness`, `/actuator/info` e `/actuator/metrics`; health é público e métricas exigem JWT. `env`, `beans` e `configprops` não são expostos. Métricas próprias incluem `orders.created`, `orders.status.changed`, `geocoding.requests`, `geocoding.failures`, `geocoding.duration` (operação completa, incluindo retries e esperas) e `rate.limit.rejected` (com tags de baixa cardinalidade). Não há tags com pedido, usuário, IP, endereço ou correlation ID.
-
-### Logs e correlação
-
-Todo request HTTP recebe `X-Correlation-ID`: valores aceitos têm 1–64 caracteres `[A-Za-z0-9._-]`, iniciando por alfanumérico; valores ausentes ou inválidos são substituídos por UUID seguro e retornados na resposta. O valor é posto no MDC e removido no `finally`. O executor de geocodificação usa `TaskDecorator` que captura, restaura e limpa MDC; a publicação STOMP após commit preserva o contexto da transação e frames STOMP também recebem contexto próprio. JWT, senhas, Authorization, cookies e endereço completo não são registrados.
-
-Em desenvolvimento os logs continuam legíveis. Com o perfil `prod`, Spring Boot emite JSON Logstash nativo, por exemplo: `{"@timestamp":"...","log.level":"INFO","message":"Order status notification published operation=order.status.websocket orderId=... outcome=SUCCESS","correlationId":"..."}`. O ID é observabilidade interna e não é acrescentado ao payload público WebSocket.
+- [Guia do frontend](frontend/README.md)
+- [Guia do backend](backend/README.md)
+- [Registro técnico anterior](docs/VALIDACAO_FINAL.md) — histórico de uma validação em outro estado do repositório, com resultados distintos dos registrados acima.
