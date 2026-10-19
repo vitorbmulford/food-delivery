@@ -135,9 +135,7 @@ describe('autenticação e rotas', () => {
     renderRoute('/insights')
 
     expect(await screen.findByRole('heading', { name: 'Insights' })).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: 'Relatórios analíticos em breve' }),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Análise comercial e desempenho da operação.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Insights' })).toHaveAttribute('href', '/insights')
   })
 

@@ -14,6 +14,7 @@ import {
   Skeleton,
   Stack as MuiStack,
   TextField,
+  Tooltip,
   Typography,
   useMediaQuery,
   type SxProps,
@@ -172,16 +173,20 @@ function StatusDistribution({
         aria-label="Distribuição dos pedidos por status"
       >
         {orderStatuses.map((status) => (
-          <Box
+          <Tooltip
             key={status}
-            className="dashboard-status-segment"
-            sx={{
-              width: `${(counts[status] / total) * 100}%`,
-              bgcolor: statusColors[status],
-            }}
-            title={`${orderStatusLabels[status]}: ${counts[status]} (${Math.round((counts[status] / total) * 100)}%)`}
-            aria-label={`${orderStatusLabels[status]}: ${counts[status]}`}
-          />
+            title={`${orderStatusLabels[status]}: ${counts[status]} pedidos (${Math.round((counts[status] / total) * 100)}%)`}
+            arrow
+          >
+            <Box
+              className="dashboard-status-segment"
+              sx={{
+                width: `${(counts[status] / total) * 100}%`,
+                bgcolor: statusColors[status],
+              }}
+              aria-label={`${orderStatusLabels[status]}: ${counts[status]}`}
+            />
+          </Tooltip>
         ))}
       </Box>
       {orderStatuses.map((status) => {
@@ -229,7 +234,11 @@ function DailyCreatedChart({ data }: { data: DashboardDailyActivity[] }) {
   if (!data.some((day) => day.created > 0))
     return <EmptyChart message="Nenhum pedido criado neste período." />
   const width = Math.max(data.length * 8, 620)
-  const chartHeight = 152
+  const chartHeight = 130
+  const ticks =
+    max <= 4
+      ? Array.from({ length: max + 1 }, (_, value) => value)
+      : [...new Set([0, Math.round(max / 3), Math.round((2 * max) / 3), max])]
   return (
     <Box sx={{ overflowX: 'auto', pb: 1 }}>
       <svg
@@ -239,18 +248,25 @@ function DailyCreatedChart({ data }: { data: DashboardDailyActivity[] }) {
         width="100%"
         style={{ minWidth: 620, display: 'block' }}
       >
-        {[0, 1, 2, 3].map((line) => (
-          <g key={line}>
+        {ticks.map((tick) => (
+          <g key={tick}>
             <line
               x1="30"
               x2={width - 8}
-              y1={12 + line * 45}
-              y2={12 + line * 45}
+              y1={147 - (tick / max) * chartHeight}
+              y2={147 - (tick / max) * chartHeight}
               stroke="currentColor"
               opacity=".12"
             />
-            <text x="0" y={16 + line * 45} fill="currentColor" opacity=".62" fontSize="10">
-              {Math.round((max * (3 - line)) / 3)}
+            <text
+              x="24"
+              y={151 - (tick / max) * chartHeight}
+              textAnchor="end"
+              fill="currentColor"
+              opacity=".68"
+              fontSize="10"
+            >
+              {tick}
             </text>
           </g>
         ))}
@@ -263,16 +279,21 @@ function DailyCreatedChart({ data }: { data: DashboardDailyActivity[] }) {
               <title>
                 {dateLabel(day.date, { day: 'numeric', month: 'long' })}: {day.created} pedidos
               </title>
-              <rect
-                className="dashboard-chart-bar"
-                x={x}
-                y={147 - barHeight}
-                width={barWidth}
-                height={barHeight}
-                rx="3"
-                fill="#d94b4b"
-                opacity=".88"
-              />
+              <Tooltip
+                title={`${dateLabel(day.date, { day: 'numeric', month: 'long' })} · ${day.created} pedidos`}
+                arrow
+              >
+                <rect
+                  className="dashboard-chart-bar"
+                  x={x}
+                  y={147 - barHeight}
+                  width={barWidth}
+                  height={barHeight}
+                  rx="3"
+                  fill="#d94b4b"
+                  opacity=".88"
+                />
+              </Tooltip>
               {(index === 0 ||
                 index === data.length - 1 ||
                 index === Math.floor(data.length / 2)) && (
@@ -293,6 +314,10 @@ function DailyEventsChart({ data }: { data: DashboardDailyActivity[] }) {
   if (!data.some((day) => day.delivered > 0 || day.cancelled > 0))
     return <EmptyChart message="Nenhuma entrega concluída ou cancelamento neste período." />
   const width = Math.max(data.length * 8, 620)
+  const ticks =
+    max <= 4
+      ? Array.from({ length: max + 1 }, (_, value) => value)
+      : [...new Set([0, Math.round(max / 3), Math.round((2 * max) / 3), max])]
   return (
     <Stack spacing={1.5}>
       <Stack direction="row" spacing={2}>
@@ -325,21 +350,32 @@ function DailyEventsChart({ data }: { data: DashboardDailyActivity[] }) {
           width="100%"
           style={{ minWidth: 620, display: 'block' }}
         >
-          {[0, 1, 2, 3].map((line) => (
-            <line
-              key={line}
-              x1="4"
-              x2={width - 6}
-              y1={12 + line * 45}
-              y2={12 + line * 45}
-              stroke="currentColor"
-              opacity=".12"
-            />
+          {ticks.map((tick) => (
+            <g key={tick}>
+              <line
+                x1="38"
+                x2={width - 6}
+                y1={147 - (tick / max) * 130}
+                y2={147 - (tick / max) * 130}
+                stroke="currentColor"
+                opacity=".12"
+              />
+              <text
+                x="30"
+                y={151 - (tick / max) * 130}
+                textAnchor="end"
+                fill="currentColor"
+                opacity=".68"
+                fontSize="10"
+              >
+                {tick}
+              </text>
+            </g>
           ))}
           {data.map((day, index) => {
-            const slot = (width - 12) / data.length
+            const slot = (width - 46) / data.length
             const barWidth = Math.max(2, slot * 0.28)
-            const x = 5 + index * slot
+            const x = 40 + index * slot
             const deliveredH = (day.delivered / max) * 130
             const cancelledH = (day.cancelled / max) * 130
             return (
@@ -348,24 +384,34 @@ function DailyEventsChart({ data }: { data: DashboardDailyActivity[] }) {
                   {dateLabel(day.date, { day: 'numeric', month: 'long' })}: {day.delivered}{' '}
                   entregues, {day.cancelled} cancelados
                 </title>
-                <rect
-                  className="dashboard-chart-bar"
-                  x={x + slot * 0.18}
-                  y={147 - deliveredH}
-                  width={barWidth}
-                  height={deliveredH}
-                  rx="2"
-                  fill={statusColors.ENTREGUE}
-                />
-                <rect
-                  className="dashboard-chart-bar"
-                  x={x + slot * 0.54}
-                  y={147 - cancelledH}
-                  width={barWidth}
-                  height={cancelledH}
-                  rx="2"
-                  fill={statusColors.CANCELADO}
-                />
+                <Tooltip
+                  title={`${dateLabel(day.date, { day: 'numeric', month: 'long' })} · ${day.delivered} entregues`}
+                  arrow
+                >
+                  <rect
+                    className="dashboard-chart-bar"
+                    x={x + slot * 0.18}
+                    y={147 - deliveredH}
+                    width={barWidth}
+                    height={deliveredH}
+                    rx="2"
+                    fill={statusColors.ENTREGUE}
+                  />
+                </Tooltip>
+                <Tooltip
+                  title={`${dateLabel(day.date, { day: 'numeric', month: 'long' })} · ${day.cancelled} cancelados`}
+                  arrow
+                >
+                  <rect
+                    className="dashboard-chart-bar"
+                    x={x + slot * 0.54}
+                    y={147 - cancelledH}
+                    width={barWidth}
+                    height={cancelledH}
+                    rx="2"
+                    fill={statusColors.CANCELADO}
+                  />
+                </Tooltip>
                 {(index === 0 ||
                   index === data.length - 1 ||
                   index === Math.floor(data.length / 2)) && (
