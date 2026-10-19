@@ -82,6 +82,7 @@ public class SecurityConfiguration {
         configuration.setAllowedOrigins(java.util.List.of(properties.allowedOrigin()));
         configuration.setAllowedMethods(java.util.List.of("GET", "POST", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(java.util.List.of("Authorization", "Content-Type"));
+        configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
@@ -99,7 +100,7 @@ public class SecurityConfiguration {
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                     .authorizeHttpRequests(authorize -> authorize
                             // A identidade da conexão WebSocket é estabelecida pelo frame STOMP CONNECT.
-                            .requestMatchers("/api/auth/register", "/api/auth/login", "/ws/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health/**").permitAll()
+                            .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/ws/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health/**").permitAll()
                             .requestMatchers("/api/users/me", "/api/orders/**").authenticated()
                             .anyRequest().authenticated())
                     .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))

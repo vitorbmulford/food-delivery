@@ -1,6 +1,8 @@
 package com.foody.backend;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -10,6 +12,7 @@ import com.foody.backend.auth.domain.User;
 import com.foody.backend.auth.infrastructure.persistence.UserRepository;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import com.nimbusds.jose.proc.SecurityContext;
+import jakarta.servlet.http.Cookie;
 import java.time.Instant;
 import java.util.UUID;
 import javax.crypto.spec.SecretKeySpec;
@@ -69,6 +72,29 @@ class AuthIntegrationTests {
                 .andExpect(status().isUnauthorized());
         mvc.perform(get("/api/users/me")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/users/me").header("Authorization", "Bearer invalid.token.value"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void restoresAndRenewsSessionUntilExplicitLogout() throws Exception {
+        register("persistent-session@example.com");
+        var loginResult = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"persistent-session@example.com\",\"password\":\"SenhaSegura123!\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        Cookie sessionCookie = loginResult.getResponse().getCookie("FOODY_SESSION");
+        assertNotNull(sessionCookie);
+        assertTrue(sessionCookie.isHttpOnly());
+        String accessToken = JsonPath.read(loginResult.getResponse().getContentAsString(), "$.accessToken");
+        mvc.perform(get("/api/users/me").header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/auth/refresh").cookie(sessionCookie))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.accessToken").isNotEmpty());
+        mvc.perform(post("/api/auth/logout").cookie(sessionCookie))
+                .andExpect(status().isNoContent());
+        mvc.perform(post("/api/auth/refresh").cookie(sessionCookie))
                 .andExpect(status().isUnauthorized());
     }
 

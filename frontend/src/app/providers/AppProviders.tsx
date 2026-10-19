@@ -1,8 +1,8 @@
 import { useState, type PropsWithChildren } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router'
-import { CssBaseline, ThemeProvider } from '@mui/material'
-import { appTheme } from '../theme/theme'
+import { AuthProvider } from '../../features/auth/context/AuthContext'
+import { ColorModeProvider } from '../theme/ColorModeProvider'
 
 export function AppProviders({ children }: PropsWithChildren) {
   const [queryClient] = useState(
@@ -15,11 +15,12 @@ export function AppProviders({ children }: PropsWithChildren) {
   )
 
   return (
-    <ThemeProvider theme={appTheme}>
-      <CssBaseline />
+    <ColorModeProvider>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>{children}</BrowserRouter>
+        <BrowserRouter>
+          <AuthProvider>{children}</AuthProvider>
+        </BrowserRouter>
       </QueryClientProvider>
-    </ThemeProvider>
+    </ColorModeProvider>
   )
 }
