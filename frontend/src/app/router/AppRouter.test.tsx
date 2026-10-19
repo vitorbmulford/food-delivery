@@ -8,13 +8,16 @@ import { getAccessToken, setAccessToken } from '../../features/auth/session'
 import { ColorModeProvider } from '../theme/ColorModeProvider'
 import { AppRouter } from './AppRouter'
 
-const { login, register, getCurrentUser, refreshSession, logoutSession } = vi.hoisted(() => ({
-  login: vi.fn(),
-  register: vi.fn(),
-  getCurrentUser: vi.fn(),
-  refreshSession: vi.fn(),
-  logoutSession: vi.fn(),
-}))
+const { login, register, getCurrentUser, refreshSession, logoutSession, getDashboard, getOrder } =
+  vi.hoisted(() => ({
+    login: vi.fn(),
+    register: vi.fn(),
+    getCurrentUser: vi.fn(),
+    refreshSession: vi.fn(),
+    logoutSession: vi.fn(),
+    getDashboard: vi.fn(),
+    getOrder: vi.fn(),
+  }))
 
 vi.mock('../../features/auth/api/authApi', () => ({
   login,
@@ -23,6 +26,11 @@ vi.mock('../../features/auth/api/authApi', () => ({
   refreshSession,
   logoutSession,
 }))
+
+vi.mock('../../features/orders/api/ordersApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../features/orders/api/ordersApi')>()
+  return { ...actual, getDashboard, getOrder }
+})
 
 const userProfile = { id: 'user-1', name: 'Ana Silva', email: 'ana@example.com' }
 
@@ -75,6 +83,24 @@ describe('autenticação e rotas', () => {
     register.mockResolvedValue(userProfile)
     refreshSession.mockRejectedValue({ isAxiosError: true, response: { status: 401 } })
     logoutSession.mockResolvedValue(undefined)
+    getOrder.mockRejectedValue({ isAxiosError: true, response: { status: 404 } })
+    getDashboard.mockResolvedValue({
+      from: '2026-10-13',
+      to: '2026-10-19',
+      totalCreated: 0,
+      statusCounts: {
+        RECEBIDO: 0,
+        EM_PREPARO: 0,
+        SAIU_PARA_ENTREGA: 0,
+        ENTREGUE: 0,
+        CANCELADO: 0,
+      },
+      deliveredInPeriod: 0,
+      cancelledInPeriod: 0,
+      dailyActivity: [],
+      recentOrders: [],
+      ongoingOrders: [],
+    })
   })
 
   it('redireciona usuário anônimo de rota protegida para login e retorna à rota após autenticar', async () => {

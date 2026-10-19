@@ -79,7 +79,7 @@ public class SecurityConfiguration {
     @Bean
     CorsConfigurationSource corsConfigurationSource(JwtProperties properties) {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(java.util.List.of(properties.allowedOrigin()));
+        configuration.setAllowedOrigins(properties.allowedOrigins());
         configuration.setAllowedMethods(java.util.List.of("GET", "POST", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(java.util.List.of("Authorization", "Content-Type"));
         configuration.setAllowCredentials(true);

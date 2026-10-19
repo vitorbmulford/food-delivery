@@ -9,7 +9,10 @@ RUN ./mvnw -B clean package -DskipTests
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-RUN useradd --system --uid 10001 --create-home appuser
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --create-home appuser
 COPY --from=build /workspace/target/backend-0.0.1-SNAPSHOT.jar app.jar
 USER 10001
 EXPOSE 8080
