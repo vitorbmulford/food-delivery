@@ -4,6 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.foody.backend.auth.domain.User;
+import com.foody.backend.geocoding.domain.CoordinateSource;
+import com.foody.backend.geocoding.domain.GeoCoordinates;
+import com.foody.backend.geocoding.domain.GeocodingStatus;
+import com.foody.backend.geocoding.domain.GeocodingResult;
+import com.foody.backend.geocoding.domain.GeocodingSuggestionLevel;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -59,6 +64,42 @@ class OrderTest {
                 new DeliveryAddress("Street", "1", null, "Center", "City", "SP", "01001000"),
                 List.of(OrderItem.create("Burger", 1, new BigDecimal("60000000000000000.00")),
                         OrderItem.create("Soda", 1, new BigDecimal("60000000000000000.00"))), now));
+    }
+
+    @Test
+    void manualCoordinatesCannotBeOverwrittenByLaterAutomaticResult() {
+        Order order = order();
+        GeoCoordinates manual = new GeoCoordinates(new BigDecimal("-23.550520"), new BigDecimal("-46.633309"));
+
+        order.confirmManualCoordinates(manual, now.plusSeconds(1));
+        order.applyGeocoding(GeocodingStatus.SUCCESS,
+                new GeoCoordinates(new BigDecimal("-22.000000"), new BigDecimal("-45.000000")));
+
+        assertEquals(manual, order.getCoordinates());
+        assertEquals(CoordinateSource.MANUAL, order.getCoordinateSource());
+        assertEquals(GeocodingStatus.SUCCESS, order.getGeocodingStatus());
+    }
+
+    @Test
+    void approximateSuggestionRemainsSeparateAndIsClearedByManualConfirmation() {
+        Order order = order();
+        GeoCoordinates suggestion = new GeoCoordinates(new BigDecimal("-23.561400"), new BigDecimal("-46.655900"));
+        GeoCoordinates manual = new GeoCoordinates(new BigDecimal("-23.550520"), new BigDecimal("-46.633309"));
+
+        order.applyGeocoding(GeocodingResult.approximate(suggestion, GeocodingSuggestionLevel.STREET));
+
+        assertEquals(GeocodingStatus.NOT_FOUND, order.getGeocodingStatus());
+        assertEquals(suggestion, order.getSuggestedCoordinates());
+        assertEquals(GeocodingSuggestionLevel.STREET, order.getGeocodingSuggestionLevel());
+        assertEquals(null, order.getCoordinates());
+
+        order.confirmManualCoordinates(manual, now.plusSeconds(1));
+        order.applyGeocoding(GeocodingResult.approximate(suggestion, GeocodingSuggestionLevel.NEIGHBORHOOD));
+
+        assertEquals(manual, order.getCoordinates());
+        assertEquals(null, order.getSuggestedCoordinates());
+        assertEquals(null, order.getGeocodingSuggestionLevel());
+        assertEquals(CoordinateSource.MANUAL, order.getCoordinateSource());
     }
 
     private Order order() {

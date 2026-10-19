@@ -3,6 +3,9 @@ package com.foody.backend.orders.domain;
 import com.foody.backend.auth.domain.User;
 import com.foody.backend.geocoding.domain.GeoCoordinates;
 import com.foody.backend.geocoding.domain.GeocodingStatus;
+import com.foody.backend.geocoding.domain.CoordinateSource;
+import com.foody.backend.geocoding.domain.GeocodingResult;
+import com.foody.backend.geocoding.domain.GeocodingSuggestionLevel;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
@@ -55,6 +58,16 @@ public class Order {
     private GeocodingStatus geocodingStatus;
     @Column(name = "geocoding_last_attempt_at")
     private Instant geocodingLastAttemptAt;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "coordinate_source", length = 20)
+    private CoordinateSource coordinateSource;
+    @Column(name = "suggested_latitude", precision = 9, scale = 6)
+    private BigDecimal suggestedLatitude;
+    @Column(name = "suggested_longitude", precision = 9, scale = 6)
+    private BigDecimal suggestedLongitude;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "geocoding_suggestion_level", length = 20)
+    private GeocodingSuggestionLevel geocodingSuggestionLevel;
     @Version
     private Long version;
 
@@ -101,11 +114,34 @@ public class Order {
     }
 
     public void applyGeocoding(GeocodingStatus result, GeoCoordinates coordinates) {
-        geocodingStatus = result;
-        if (result == GeocodingStatus.SUCCESS && coordinates != null) {
-            latitude = coordinates.latitude();
-            longitude = coordinates.longitude();
+        applyGeocoding(new GeocodingResult(result, coordinates));
+    }
+
+    public void applyGeocoding(GeocodingResult result) {
+        if (coordinateSource == CoordinateSource.MANUAL) {
+            return;
         }
+        geocodingStatus = result.status();
+        if (result.status() == GeocodingStatus.SUCCESS) {
+            latitude = result.coordinates().latitude();
+            longitude = result.coordinates().longitude();
+            coordinateSource = CoordinateSource.AUTOMATIC;
+        }
+        GeoCoordinates suggestion = result.suggestedCoordinates();
+        suggestedLatitude = suggestion == null ? null : suggestion.latitude();
+        suggestedLongitude = suggestion == null ? null : suggestion.longitude();
+        geocodingSuggestionLevel = result.suggestionLevel();
+    }
+
+    public void confirmManualCoordinates(GeoCoordinates coordinates, Instant now) {
+        latitude = coordinates.latitude();
+        longitude = coordinates.longitude();
+        coordinateSource = CoordinateSource.MANUAL;
+        geocodingStatus = GeocodingStatus.SUCCESS;
+        suggestedLatitude = null;
+        suggestedLongitude = null;
+        geocodingSuggestionLevel = null;
+        updatedAt = now;
     }
 
     private static BigDecimal money(BigDecimal amount) { return amount.setScale(MONEY_SCALE, RoundingMode.HALF_UP); }
@@ -121,4 +157,9 @@ public class Order {
     public GeoCoordinates getCoordinates() { return latitude == null ? null : new GeoCoordinates(latitude, longitude); }
     public GeocodingStatus getGeocodingStatus() { return geocodingStatus; }
     public Instant getGeocodingLastAttemptAt() { return geocodingLastAttemptAt; }
+    public CoordinateSource getCoordinateSource() { return coordinateSource; }
+    public GeoCoordinates getSuggestedCoordinates() {
+        return suggestedLatitude == null ? null : new GeoCoordinates(suggestedLatitude, suggestedLongitude);
+    }
+    public GeocodingSuggestionLevel getGeocodingSuggestionLevel() { return geocodingSuggestionLevel; }
 }

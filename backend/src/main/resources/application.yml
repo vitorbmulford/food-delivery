@@ -28,7 +28,7 @@ auth:
 geocoding:
   nominatim:
     base-url: ${NOMINATIM_BASE_URL:https://nominatim.openstreetmap.org}
-    user-agent: "${NOMINATIM_USER_AGENT:foody-delivery/1.0 (contact: admin@example.com)}"
+    user-agent: "${NOMINATIM_USER_AGENT:foody-delivery/1.0 (+https://github.com/vitorbmulford/food-delivery)}"
     connect-timeout: ${NOMINATIM_CONNECT_TIMEOUT:2s}
     read-timeout: ${NOMINATIM_READ_TIMEOUT:5s}
 app:

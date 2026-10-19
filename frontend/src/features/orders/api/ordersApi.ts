@@ -24,6 +24,20 @@ export async function getOrder(id: string) {
   return data
 }
 
+export async function requestOrderGeocoding(id: string) {
+  const response = await apiClient.post<void>(`/api/orders/${id}/geocode`)
+  if (response.status !== 202) throw new Error('Unexpected geocoding response status')
+  return response.status
+}
+
+export async function setManualOrderLocation(
+  id: string,
+  coordinates: { latitude: number; longitude: number },
+) {
+  const { data } = await apiClient.patch<Order>(`/api/orders/${id}/location`, coordinates)
+  return data
+}
+
 export async function getOrderHistory(id: string) {
   const { data } = await apiClient.get<OrderStatusHistory[]>(`/api/orders/${id}/history`)
   return data

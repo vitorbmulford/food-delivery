@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '../../../lib/api/client'
-import { createOrder, getOrderHistory, listOrders, updateOrderStatus } from './ordersApi'
+import {
+  createOrder,
+  getOrderHistory,
+  listOrders,
+  requestOrderGeocoding,
+  setManualOrderLocation,
+  updateOrderStatus,
+} from './ordersApi'
 
 vi.mock('../../../lib/api/client', () => ({
   apiClient: { get: vi.fn(), post: vi.fn(), patch: vi.fn() },
@@ -54,6 +61,28 @@ describe('API de pedidos', () => {
     vi.mocked(apiClient.get).mockResolvedValue({ data: history })
     await expect(getOrderHistory('order-1')).resolves.toEqual(history)
     expect(apiClient.get).toHaveBeenCalledWith('/api/orders/order-1/history')
+  })
+
+  it('solicita nova geocodificação e valida o HTTP 202 aceito pelo backend', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ status: 202 })
+    await expect(requestOrderGeocoding('order-1')).resolves.toBe(202)
+    expect(apiClient.post).toHaveBeenCalledWith('/api/orders/order-1/geocode')
+
+    vi.mocked(apiClient.post).mockResolvedValueOnce({ status: 200 })
+    await expect(requestOrderGeocoding('order-1')).rejects.toThrow(
+      'Unexpected geocoding response status',
+    )
+  })
+
+  it('confirma coordenadas manuais no pedido', async () => {
+    const coordinates = { latitude: -23.55052, longitude: -46.633309 }
+    vi.mocked(apiClient.patch).mockResolvedValue({
+      data: { id: 'order-1', coordinates, coordinateSource: 'MANUAL' },
+    })
+
+    await setManualOrderLocation('order-1', coordinates)
+
+    expect(apiClient.patch).toHaveBeenCalledWith('/api/orders/order-1/location', coordinates)
   })
 
   it('envia o status real no PATCH e propaga erros da API', async () => {

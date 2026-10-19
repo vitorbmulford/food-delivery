@@ -30,7 +30,7 @@ services:
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
       NOMINATIM_BASE_URL: ${NOMINATIM_BASE_URL:-https://nominatim.openstreetmap.org}
-      NOMINATIM_USER_AGENT: "${NOMINATIM_USER_AGENT:-foody-delivery/1.0 (contact: admin@example.com)}"
+      NOMINATIM_USER_AGENT: "${NOMINATIM_USER_AGENT:-foody-delivery/1.0 (+https://github.com/vitorbmulford/food-delivery)}"
       NOMINATIM_CONNECT_TIMEOUT: ${NOMINATIM_CONNECT_TIMEOUT:-2s}
       NOMINATIM_READ_TIMEOUT: ${NOMINATIM_READ_TIMEOUT:-5s}
       NOMINATIM_RETRY_MAX_ATTEMPTS: ${NOMINATIM_RETRY_MAX_ATTEMPTS:-3}

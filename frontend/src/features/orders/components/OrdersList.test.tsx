@@ -30,6 +30,9 @@ const order: Order = {
   updatedAt: '2026-10-19T12:00:00Z',
   coordinates: null,
   geocodingStatus: 'PENDING',
+  coordinateSource: null,
+  suggestedCoordinates: null,
+  geocodingSuggestionLevel: null,
 }
 
 function renderList(overrides: Partial<React.ComponentProps<typeof OrdersList>> = {}) {

@@ -39,8 +39,15 @@ export type Order = {
   createdAt: string
   updatedAt: string
   coordinates: { latitude: number; longitude: number } | null
-  geocodingStatus: string
+  geocodingStatus: GeocodingStatus
+  coordinateSource: CoordinateSource | null
+  suggestedCoordinates: { latitude: number; longitude: number } | null
+  geocodingSuggestionLevel: GeocodingSuggestionLevel | null
 }
+
+export type GeocodingStatus = 'PENDING' | 'SUCCESS' | 'NOT_FOUND' | 'FAILED' | (string & {})
+export type CoordinateSource = 'AUTOMATIC' | 'MANUAL'
+export type GeocodingSuggestionLevel = 'STREET' | 'NEIGHBORHOOD' | 'POSTAL_CODE'
 
 export type OrderStatusHistory = {
   id: string

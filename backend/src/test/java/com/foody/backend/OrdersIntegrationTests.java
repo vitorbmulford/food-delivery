@@ -89,6 +89,19 @@ class OrdersIntegrationTests {
         mvc.perform(get("/api/orders/{id}", id).header("Authorization", bearer(stranger))).andExpect(status().isNotFound());
         mvc.perform(post("/api/orders/{id}/geocode", id).header("Authorization", bearer(stranger))).andExpect(status().isNotFound());
         mvc.perform(post("/api/orders/{id}/geocode", id).header("Authorization", bearer(owner))).andExpect(status().isAccepted());
+        mvc.perform(patch("/api/orders/{id}/location", id).header("Authorization", bearer(stranger))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"latitude\":-23.55,\"longitude\":-46.63}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(patch("/api/orders/{id}/location", id).header("Authorization", bearer(owner))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"latitude\":91,\"longitude\":-46.63}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(patch("/api/orders/{id}/location", id).header("Authorization", bearer(owner))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"latitude\":-23.550520,\"longitude\":-46.633309}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.coordinates.latitude").value(-23.550520))
+                .andExpect(jsonPath("$.coordinates.longitude").value(-46.633309))
+                .andExpect(jsonPath("$.coordinateSource").value("MANUAL"))
+                .andExpect(jsonPath("$.deliveryAddress.street").value("Rua das Flores"));
         mvc.perform(get("/api/orders/{id}", java.util.UUID.randomUUID()).header("Authorization", bearer(owner))).andExpect(status().isNotFound());
         update(owner, id, "ENTREGUE").andExpect(status().isConflict());
         mvc.perform(patch("/api/orders/{id}/status", id).header("Authorization", bearer(owner))
