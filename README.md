@@ -202,3 +202,29 @@ O evento só é emitido após o commit da transação que atualiza o pedido e cr
 ## Fora do escopo
 
 Mapas, rastreamento GPS, rotas, cálculo de distância/frete, catálogo, estoque, pagamentos e frontend React continuam fora do escopo.
+
+## Resiliência e observabilidade
+
+### Rate limiting
+
+O backend aplica Bucket4j local (em memória) antes dos handlers: `POST /api/auth/login` aceita 10 requisições por minuto por IP da conexão, `POST /api/auth/register` aceita 5 por IP e `POST /api/orders/{id}/geocode` aceita 3 por minuto por usuário autenticado. O excedente recebe `429` com `Retry-After`. Os valores `RATE_LIMIT_*` são configuráveis. Buckets ociosos expiram após 15 minutos e o cache tem limite máximo; IPs e UUIDs nunca são escritos em logs ou tags de métricas. Não é usado `X-Forwarded-For`: se a aplicação estiver atrás de proxy confiável, configure o container/proxy para substituir corretamente o endereço remoto antes de encaminhar a requisição.
+
+O limite é por instância: em múltiplas réplicas não há coordenação distribuída. Redis não foi introduzido nesta etapa.
+
+### Nominatim: retry, circuit breaker e limite global
+
+Cada tentativa, inclusive retry e reprocessamento manual, passa pelo limitador global de uma requisição por segundo. Em seguida a chamada é protegida por Circuit Breaker programático do Resilience4j e Retry programático. A política padrão é até 3 tentativas, backoff exponencial de 1 s, multiplicador 2, jitter de 20% e teto de 5 s. Timeout/rede, 429, 502, 503 e 504 podem ser repetidos; 400/401/403, endereço não encontrado e respostas válidas vazias não são. `Retry-After` numérico ou HTTP-date recebido em 429 adia o limitador global (até um orçamento seguro de um minuto), portanto uma tentativa posterior não antecipa o provedor.
+
+O breaker `nominatim` inicia fechado, abre após a janela configurável (padrão: ao menos 5 chamadas, 50% de falhas), espera 30 s e permite 2 chamadas em `HALF_OPEN`. Quando aberto não há HTTP; a geocodificação é marcada como falha sem afetar o pedido já confirmado. Os parâmetros `NOMINATIM_RETRY_*` e `NOMINATIM_CIRCUIT_*` configuram a política. Como o executor assíncrono é propositalmente unitário, o backoff bloqueia essa única tarefa durante a espera: é uma limitação MVP documentada, sem fila distribuída.
+
+Ordem operacional: rate limit de entrada → validação JWT → transação de pedido → evento após commit → executor assíncrono → circuit breaker → retry → limitador global Nominatim → cliente HTTP. O Circuit Breaker envolve a operação lógica inteira: uma sequência de retries esgotada conta como uma falha, em vez de multiplicar a contagem por tentativa. Cada tentativa continua passando pelo limitador global; uma rejeição do breaker não é uma chamada HTTP.
+
+### Actuator e métricas
+
+São expostos somente `GET /actuator/health`, `/actuator/health/liveness`, `/actuator/health/readiness`, `/actuator/info` e `/actuator/metrics`; health é público e métricas exigem JWT. `env`, `beans` e `configprops` não são expostos. Métricas próprias incluem `orders.created`, `orders.status.changed`, `geocoding.requests`, `geocoding.failures`, `geocoding.duration` (operação completa, incluindo retries e esperas) e `rate.limit.rejected` (com tags de baixa cardinalidade). Não há tags com pedido, usuário, IP, endereço ou correlation ID.
+
+### Logs e correlação
+
+Todo request HTTP recebe `X-Correlation-ID`: valores aceitos têm 1–64 caracteres `[A-Za-z0-9._-]`, iniciando por alfanumérico; valores ausentes ou inválidos são substituídos por UUID seguro e retornados na resposta. O valor é posto no MDC e removido no `finally`. O executor de geocodificação usa `TaskDecorator` que captura, restaura e limpa MDC; a publicação STOMP após commit preserva o contexto da transação e frames STOMP também recebem contexto próprio. JWT, senhas, Authorization, cookies e endereço completo não são registrados.
+
+Em desenvolvimento os logs continuam legíveis. Com o perfil `prod`, Spring Boot emite JSON Logstash nativo, por exemplo: `{"@timestamp":"...","log.level":"INFO","message":"Order status notification published operation=order.status.websocket orderId=... outcome=SUCCESS","correlationId":"..."}`. O ID é observabilidade interna e não é acrescentado ao payload público WebSocket.
