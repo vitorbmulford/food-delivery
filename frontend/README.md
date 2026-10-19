@@ -102,7 +102,7 @@ src/
 - `/orders/new`
 - `/orders/:id`
 
-Endereços desconhecidos exibem a página de fallback. `/orders` lista pedidos reais com paginação e filtro por status sincronizados à URL. `/orders/new` cria pedidos por formulário validado e `/orders/:id` mostra o pedido consultado na API, itens, endereço, cliente, totais, andamento resumido e histórico real de mudanças. UUIDs inválidos são barrados antes da consulta; pedidos ausentes ou inacessíveis recebem o estado de não encontrado.
+Endereços desconhecidos exibem a página de fallback. `/orders` lista pedidos reais com paginação, status e busca sincronizados à URL. A busca tem debounce e encontra nome, e-mail, telefone sem máscara ou UUID do pedido. `/orders/new` começa pelos dados do cliente externo (nome, telefone brasileiro e e-mail opcional), sem preencher dados do operador autenticado. `/orders/:id` mostra o pedido, cliente, endereço de entrega, totais, andamento resumido e histórico real; registros históricos sem contato exibem “Cliente não informado”. UUIDs inválidos são barrados antes da consulta; pedidos ausentes ou inacessíveis recebem o estado de não encontrado.
 
 ## Insights
 

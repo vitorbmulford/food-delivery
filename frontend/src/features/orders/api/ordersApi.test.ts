@@ -42,6 +42,7 @@ describe('API de pedidos', () => {
 
   it('cria pedido com DTO items e deliveryAddress', async () => {
     const payload = {
+      customer: { name: 'Maria Silva', phone: '11999999999', email: null },
       items: [{ productName: 'Marmita', quantity: 2, unitPrice: 24.9 }],
       deliveryAddress: {
         street: 'Rua A',

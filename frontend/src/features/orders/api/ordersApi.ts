@@ -27,12 +27,13 @@ export async function getDashboard(from: string, to: string) {
 }
 
 export async function listOrders(filters: OrderFilters) {
-  if (DEMO_MODE) return demoListOrders(filters.page, filters.size, filters.status)
+  if (DEMO_MODE) return demoListOrders(filters.page, filters.size, filters.status, filters.search)
   const { data } = await apiClient.get<OrderPage>('/api/orders', {
     params: {
       page: filters.page,
       size: filters.size,
       ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.search ? { search: filters.search } : {}),
     },
   })
   return data

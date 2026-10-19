@@ -92,10 +92,20 @@ O comando executa testes, gera JaCoCo e roda SpotBugs. Testes de integração us
 
 ## Pedidos
 
-Todos os endpoints de pedidos exigem `Authorization: Bearer <token>`. Um pedido é sempre associado ao usuário presente no JWT; não é aceito `customerId` no payload. Por enquanto, cada usuário visualiza e altera apenas os próprios pedidos.
+Foody Delivery é uma plataforma de gestão: o usuário autenticado é o **operador** que possui e administra os pedidos; o **cliente** é externo, não possui login e seus dados são um snapshot histórico do pedido. O endereço persistido é o endereço de entrega do cliente. O isolamento, Dashboard, Insights, histórico, geocodificação e eventos privados continuam baseados exclusivamente no operador do JWT.
+
+Todos os endpoints de pedidos exigem `Authorization: Bearer <token>`. `POST /api/orders` recebe `customer.name`, `customer.phone` e `customer.email` opcional, além dos itens e endereço; não aceita qualquer identificador de proprietário. O telefone é armazenado somente com dígitos brasileiros (DDD + 8 ou 9 dígitos). Pedidos anteriores à mudança podem ter cliente ausente.
+
+```json
+{
+  "customer": { "name": "Maria Silva", "phone": "11999999999", "email": "maria@email.com" },
+  "items": [{ "productName": "Hambúrguer", "quantity": 2, "unitPrice": 24.9 }],
+  "deliveryAddress": { "street": "Rua Exemplo", "number": "123", "neighborhood": "Centro", "city": "São Paulo", "state": "SP", "postalCode": "01001000" }
+}
+```
 
 - `POST /api/orders`: cria um pedido e retorna `201 Created` com o header `Location`.
-- `GET /api/orders?page=0&size=10&status=RECEBIDO`: lista somente os pedidos do usuário, do mais recente ao mais antigo. O tamanho máximo da página é 50.
+- `GET /api/orders?page=0&size=10&status=RECEBIDO&search=Maria`: lista somente os pedidos do operador, do mais recente ao mais antigo. `search` encontra nome/e-mail parcialmente, telefone sem máscara ou o UUID exato. O tamanho máximo da página é 50.
 - `GET /api/orders/{id}`: consulta um pedido próprio; pedidos de terceiros retornam `404`.
 - `PATCH /api/orders/{id}/status`: atualiza o status de um pedido próprio.
 - `GET /api/orders/{id}/history`: retorna a timeline de status de um pedido próprio, do evento mais antigo ao mais recente.

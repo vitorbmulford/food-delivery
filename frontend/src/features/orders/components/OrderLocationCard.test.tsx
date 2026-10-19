@@ -36,7 +36,7 @@ vi.mock('./OrderMap', () => ({
 
 const baseOrder: Order = {
   id: '7a5f6462-dd57-4fef-aed2-8825b85cef0b',
-  customer: { id: 'customer-1', name: 'Ana Silva', email: 'ana@example.com' },
+  customer: { name: 'Ana Silva', phone: '11999999999', email: 'ana@example.com' },
   status: 'EM_PREPARO',
   items: [],
   deliveryAddress: {

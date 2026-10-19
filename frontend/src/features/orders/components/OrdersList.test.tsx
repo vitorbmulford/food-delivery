@@ -11,7 +11,7 @@ afterEach(cleanup)
 
 const order: Order = {
   id: 'c3c5a62b-4d7a-4bb0-a8fd-603ac69cb321',
-  customer: { id: 'customer-1', name: 'Ana Silva', email: 'ana@example.com' },
+  customer: { name: 'Ana Silva', phone: '11999999999', email: 'ana@example.com' },
   status: 'RECEBIDO',
   items: [
     { id: 'item-1', productName: 'Hambúrguer', quantity: 2, unitPrice: 32.9, subtotal: 65.8 },
@@ -47,6 +47,9 @@ function renderList(overrides: Partial<React.ComponentProps<typeof OrdersList>> 
     totalPages: 2,
     totalElements: 11,
     status: '',
+    search: '',
+    onSearchChange: vi.fn(),
+    onClearSearch: vi.fn(),
     onStatusChange: vi.fn(),
     onPageChange: vi.fn(),
     onRetry: vi.fn(),

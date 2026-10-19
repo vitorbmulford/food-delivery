@@ -16,12 +16,21 @@ import {
   normalizeCurrencyInput,
 } from '../features/orders/utils/sanitizeInput'
 
+function formatBrazilianPhone(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+}
+
 export function CreateOrderPage() {
   const navigate = useNavigate()
   const create = useCreateOrder()
   const form = useForm<CreateOrderForm, unknown, CreateOrderInput>({
     resolver: zodResolver(createOrderSchema),
     defaultValues: {
+      customer: { name: '', phone: '', email: '' },
       items: [{ productName: '', quantity: '1', unitPrice: '' }],
       deliveryAddress: {
         street: '',
@@ -36,6 +45,7 @@ export function CreateOrderPage() {
   })
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' })
   const values = useWatch({ control: form.control, name: 'items' })
+  const customerPhone = useWatch({ control: form.control, name: 'customer.phone' })
   const previewCents = values.reduce((sum, item) => {
     const price = Number(String(item.unitPrice).replace(',', '.'))
     const quantity = Number(item.quantity)
@@ -72,7 +82,10 @@ export function CreateOrderPage() {
 
   return (
     <>
-      <PageHeading title="Novo pedido" description="Informe os itens e o endereço de entrega." />
+      <PageHeading
+        title="Novo pedido"
+        description="Informe o cliente, os itens e o endereço de entrega."
+      />
       <Box component="form" onSubmit={submit} noValidate>
         <Stack spacing={2.5}>
           {create.isError && (
@@ -83,6 +96,56 @@ export function CreateOrderPage() {
               )}
             </Alert>
           )}
+          <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
+            <Stack spacing={2}>
+              <Typography variant="h3">Dados do cliente</Typography>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))' },
+                  gap: 1.5,
+                }}
+              >
+                <TextField
+                  label="Nome completo"
+                  fullWidth
+                  {...form.register('customer.name')}
+                  error={Boolean(form.formState.errors.customer?.name)}
+                  helperText={form.formState.errors.customer?.name?.message}
+                  slotProps={{ htmlInput: { maxLength: 120 } }}
+                />
+                <TextField
+                  label="Telefone"
+                  fullWidth
+                  inputMode="tel"
+                  value={formatBrazilianPhone(customerPhone)}
+                  onChange={(event) =>
+                    form.setValue(
+                      'customer.phone',
+                      event.target.value.replace(/\D/g, '').slice(0, 11),
+                      {
+                        shouldDirty: true,
+                        shouldValidate: Boolean(form.formState.errors.customer?.phone),
+                      },
+                    )
+                  }
+                  error={Boolean(form.formState.errors.customer?.phone)}
+                  helperText={form.formState.errors.customer?.phone?.message ?? 'Inclua o DDD.'}
+                  slotProps={{ htmlInput: { maxLength: 15 } }}
+                />
+                <TextField
+                  label="E-mail (opcional)"
+                  fullWidth
+                  type="email"
+                  {...form.register('customer.email')}
+                  error={Boolean(form.formState.errors.customer?.email)}
+                  helperText={form.formState.errors.customer?.email?.message}
+                  slotProps={{ htmlInput: { maxLength: 320 } }}
+                  sx={{ gridColumn: { sm: 'span 2' } }}
+                />
+              </Box>
+            </Stack>
+          </Paper>
           <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
             <Stack spacing={2}>
               <Typography variant="h3">Itens do pedido</Typography>

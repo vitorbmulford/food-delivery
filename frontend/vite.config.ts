@@ -12,6 +12,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    env: { VITE_DEMO_MODE: 'false' },
     setupFiles: ['./src/test/setup.ts'],
     css: true,
   },

@@ -21,11 +21,16 @@ export type DeliveryAddressInput = {
 export type DeliveryAddress = Omit<DeliveryAddressInput, 'complement'> & {
   complement: string | null
 }
-export type CreateOrderInput = { items: CreateOrderItem[]; deliveryAddress: DeliveryAddressInput }
+export type CustomerInput = { name: string; phone: string; email: string | null }
+export type CreateOrderInput = {
+  customer: CustomerInput
+  items: CreateOrderItem[]
+  deliveryAddress: DeliveryAddressInput
+}
 
 export type Order = {
   id: string
-  customer: { id: string; name: string; email: string }
+  customer: { name: string | null; phone: string | null; email: string | null }
   status: OrderStatus
   items: Array<{
     id: string
@@ -67,7 +72,7 @@ export type OrderPage = {
   }
 }
 
-export type OrderFilters = { page: number; size: number; status?: OrderStatus }
+export type OrderFilters = { page: number; size: number; status?: OrderStatus; search?: string }
 
 export const orderStatusLabels: Record<OrderStatus, string> = {
   RECEBIDO: 'Recebido',

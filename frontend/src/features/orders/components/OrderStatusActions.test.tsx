@@ -20,7 +20,7 @@ vi.mock('../api/ordersApi', () => ({
 
 const baseOrder: Order = {
   id: 'order-1',
-  customer: { id: 'customer-1', name: 'Ana', email: 'ana@example.com' },
+  customer: { name: 'Ana', phone: '11999999999', email: 'ana@example.com' },
   status: 'RECEBIDO',
   items: [],
   deliveryAddress: {

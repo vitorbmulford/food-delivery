@@ -5,6 +5,21 @@ const addressTextPattern = /^[\p{L}\p{N}][\p{L}\p{N}\s.'’ºª°&()+/,-]*$/u
 const houseNumberPattern = /^\d{1,10}$/
 const complementPattern = /^$|^[\p{L}\p{N}][\p{L}\p{N}\s.'’ºª°#&()+/,-]*$/u
 
+const customerSchema = z.object({
+  name: z.string().trim().min(1, 'Informe o nome do cliente.').max(120, 'Use até 120 caracteres.'),
+  phone: z
+    .string()
+    .transform((value) => value.replace(/\D/g, ''))
+    .pipe(z.string().regex(/^\d{10,11}$/, 'Informe um telefone brasileiro válido com DDD.')),
+  email: z
+    .string()
+    .trim()
+    .transform((value) => (value === '' ? null : value))
+    .pipe(
+      z.string().email('Informe um e-mail válido.').max(320, 'Use até 320 caracteres.').nullable(),
+    ),
+})
+
 const moneyInput = z
   .string()
   .trim()
@@ -55,6 +70,7 @@ const itemSchema = z
 
 export const createOrderSchema = z
   .object({
+    customer: customerSchema,
     items: z.array(itemSchema).min(1, 'Adicione ao menos um item.'),
     deliveryAddress: z.object({
       street: z

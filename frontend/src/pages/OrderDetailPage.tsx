@@ -83,7 +83,7 @@ export function OrderDetailPage() {
         Voltar para pedidos
       </Button>
       <PageHeading
-        title="Detalhes do pedido"
+        title={query.data ? `Pedido #${query.data.id.slice(0, 8)}` : 'Detalhes do pedido'}
         description="Acompanhe os itens, a entrega e o andamento do pedido."
       />
       {!isValidId && (
@@ -152,7 +152,7 @@ export function OrderDetailPage() {
                 >
                   Pedido {query.data.id}
                 </Typography>
-                <Typography variant="h2">Pedido de {query.data.customer.name}</Typography>
+                <Typography variant="h2">Pedido #{query.data.id.slice(0, 8)}</Typography>
                 <OrderStatusActions order={query.data} compact />
                 <Stack
                   direction="row"
@@ -258,14 +258,26 @@ export function OrderDetailPage() {
                 <Stack spacing={2}>
                   <SectionTitle icon={<UserRound size={20} aria-hidden="true" />} title="Cliente" />
                   <Box sx={{ pl: { sm: 6.5 } }}>
-                    <Typography sx={{ fontWeight: 700 }}>{query.data.customer.name}</Typography>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ overflowWrap: 'anywhere' }}
-                    >
-                      {query.data.customer.email}
+                    <Typography sx={{ fontWeight: 700 }}>
+                      {query.data.customer.name ?? 'Cliente não informado'}
                     </Typography>
+                    {query.data.customer.phone && (
+                      <Typography variant="body2" color="text.secondary">
+                        {query.data.customer.phone.replace(
+                          /^(\d{2})(\d{4,5})(\d{4})$/,
+                          '($1) $2-$3',
+                        )}
+                      </Typography>
+                    )}
+                    {query.data.customer.email && (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ overflowWrap: 'anywhere' }}
+                      >
+                        {query.data.customer.email}
+                      </Typography>
+                    )}
                   </Box>
                 </Stack>
               </DetailPaper>

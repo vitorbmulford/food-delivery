@@ -63,6 +63,8 @@ describe('formulário de pedidos', () => {
     const user = userEvent.setup()
     renderForm()
     await user.click(screen.getByRole('button', { name: 'Criar pedido' }))
+    expect(await screen.findByText('Informe o nome do cliente.')).toBeInTheDocument()
+    expect(screen.getByText('Informe um telefone brasileiro válido com DDD.')).toBeInTheDocument()
     expect(await screen.findByText('Informe o produto.')).toBeInTheDocument()
     expect(screen.getByText('Informe a rua.')).toBeInTheDocument()
     expect(createOrder).not.toHaveBeenCalled()
@@ -159,6 +161,9 @@ describe('formulário de pedidos', () => {
     const user = userEvent.setup()
     createOrder.mockResolvedValue({ id: 'order-123' })
     renderForm()
+    await user.type(screen.getByLabelText('Nome completo'), 'Maria Silva')
+    await user.type(screen.getByLabelText('Telefone'), '11999999999')
+    await user.type(screen.getByLabelText('E-mail (opcional)'), 'maria@example.com')
     await user.type(screen.getByLabelText('Produto'), 'Marmita')
     await user.clear(screen.getByLabelText('Quantidade'))
     await user.type(screen.getByLabelText('Quantidade'), '2')
@@ -174,6 +179,7 @@ describe('formulário de pedidos', () => {
     await screen.findByRole('heading', { name: 'Pedido criado' })
     await waitFor(() =>
       expect(createOrder).toHaveBeenCalledWith({
+        customer: { name: 'Maria Silva', phone: '11999999999', email: 'maria@example.com' },
         items: [{ productName: 'Marmita', quantity: 2, unitPrice: 24.9 }],
         deliveryAddress: {
           street: 'Rua das Flores',
@@ -192,6 +198,8 @@ describe('formulário de pedidos', () => {
     const user = userEvent.setup()
     createOrder.mockRejectedValue({ isAxiosError: true, response: { status: 409 } })
     renderForm()
+    await user.type(screen.getByLabelText('Nome completo'), 'Maria Silva')
+    await user.type(screen.getByLabelText('Telefone'), '11999999999')
     await user.type(screen.getByLabelText('Produto'), 'Marmita')
     await user.type(screen.getByLabelText('Preço unitário (R$)'), '10,00')
     await user.type(screen.getByLabelText('Rua'), 'Rua A')

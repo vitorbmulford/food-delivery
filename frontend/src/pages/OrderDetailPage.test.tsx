@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -22,7 +22,7 @@ vi.mock('../features/orders/api/ordersApi', () => ({
 const id = '7a5f6462-dd57-4fef-aed2-8825b85cef0b'
 const order: Order = {
   id,
-  customer: { id: 'customer-1', name: 'Ana Silva', email: 'ana@example.com' },
+  customer: { name: 'Ana Silva', phone: '11999999999', email: 'ana@example.com' },
   status: 'EM_PREPARO',
   items: [{ id: 'item-1', productName: 'Marmita', quantity: 2, unitPrice: 24.5, subtotal: 49 }],
   deliveryAddress: {
@@ -92,7 +92,7 @@ describe('detalhes do pedido', () => {
     const header = screen.getByRole('region', { name: 'Cabeçalho do pedido' })
     const actions = screen.getByRole('group', { name: 'Ações disponíveis para este pedido' })
     const nextAction = screen.getByRole('button', { name: 'Saiu para entrega' })
-    const title = screen.getByRole('heading', { name: 'Pedido de Ana Silva' })
+    const title = within(header).getByRole('heading', { name: 'Pedido #7a5f6462' })
     const statusChip = header.querySelector('[data-status]')
     const createdAt = screen.getByText(/Criado em/)
     expect(header).toContainElement(actions)

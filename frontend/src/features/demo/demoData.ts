@@ -115,8 +115,8 @@ const orders: Order[] = Array.from({ length: 96 }, (_, index) => {
   return {
     id,
     customer: {
-      id: `20000000-0000-4000-8000-${String((index % 24) + 1).padStart(12, '0')}`,
       name: customerName,
+      phone: `11${String(900000000 + index).slice(-9)}`,
       email: `${customerName.toLocaleLowerCase('pt-BR').replaceAll(' ', '.')}@email.com.br`,
     },
     status,
@@ -217,9 +217,24 @@ export function demoDashboard(from: string, to: string): DashboardData {
   }
 }
 
-export function demoListOrders(page: number, size: number, status?: OrderStatus): OrderPage {
+export function demoListOrders(
+  page: number,
+  size: number,
+  status?: OrderStatus,
+  search?: string,
+): OrderPage {
+  const term = search?.trim().toLocaleLowerCase('pt-BR') ?? ''
+  const digits = term.replace(/\D/g, '')
   const filtered = [...orders]
     .filter((order) => !status || order.status === status)
+    .filter(
+      (order) =>
+        !term ||
+        order.customer.name?.toLocaleLowerCase('pt-BR').includes(term) ||
+        order.customer.email?.toLocaleLowerCase('pt-BR').includes(term) ||
+        (digits.length > 0 && order.customer.phone?.includes(digits)) ||
+        order.id === term,
+    )
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const content = filtered.slice(page * size, (page + 1) * size)
   return {
@@ -250,7 +265,11 @@ export function demoCreateOrder(input: CreateOrderInput): Order {
   }))
   const order: Order = {
     id,
-    customer: demoUser,
+    customer: {
+      name: input.customer.name,
+      phone: input.customer.phone,
+      email: input.customer.email ?? null,
+    },
     status: 'RECEBIDO',
     items,
     deliveryAddress: {

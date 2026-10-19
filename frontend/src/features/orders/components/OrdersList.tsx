@@ -8,6 +8,8 @@ import {
   CircularProgress,
   FormControl,
   InputLabel,
+  IconButton,
+  InputAdornment,
   MenuItem,
   Pagination,
   Select,
@@ -18,11 +20,12 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TextField,
   Typography,
   useMediaQuery,
   useTheme,
 } from '@mui/material'
-import { CheckCircle2, CircleX } from 'lucide-react'
+import { CheckCircle2, CircleX, Search, X } from 'lucide-react'
 import { Link } from 'react-router'
 import type { Order, OrderStatus } from '../types/order'
 import { orderStatusLabels } from '../types/order'
@@ -38,6 +41,9 @@ type Props = {
   totalPages: number
   totalElements: number
   status: OrderStatus | ''
+  search: string
+  onSearchChange: (search: string) => void
+  onClearSearch: () => void
   onStatusChange: (status: OrderStatus | '') => void
   onPageChange: (page: number) => void
   onRetry: () => void
@@ -123,6 +129,34 @@ export function OrdersList(props: Props) {
             spacing={2}
             sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
           >
+            <TextField
+              size="small"
+              label="Buscar pedidos"
+              placeholder="Buscar por cliente, telefone ou ID do pedido..."
+              value={props.search}
+              onChange={(event) => props.onSearchChange(event.target.value)}
+              sx={{ minWidth: { sm: 320 }, flex: 1 }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search size={18} aria-hidden="true" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: props.search ? (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label="Limpar busca"
+                        edge="end"
+                        onClick={props.onClearSearch}
+                      >
+                        <X size={18} />
+                      </IconButton>
+                    </InputAdornment>
+                  ) : undefined,
+                },
+              }}
+            />
             <FormControl size="small" sx={{ minWidth: { sm: 240 } }}>
               <InputLabel id="order-status-filter-label">Status</InputLabel>
               <Select
@@ -183,8 +217,8 @@ export function OrdersList(props: Props) {
               Nenhum pedido encontrado
             </Typography>
             <Typography color="text.secondary" sx={{ mb: 2 }}>
-              {props.status
-                ? 'Tente outro status ou crie um novo pedido.'
+              {props.search || props.status
+                ? 'Tente ajustar a busca ou o status selecionado.'
                 : 'Seus pedidos aparecerão aqui após a criação.'}
             </Typography>
             <Button variant="contained" onClick={props.onCreate}>
@@ -220,7 +254,14 @@ export function OrdersList(props: Props) {
                     <Typography variant="body2" color="text.secondary">
                       Criado em {formatOrderDate(order.createdAt)}
                     </Typography>
-                    <Typography variant="body2">{order.customer.name}</Typography>
+                    <Typography variant="body2">
+                      {order.customer.name ?? 'Cliente não informado'}
+                    </Typography>
+                    {order.customer.phone && (
+                      <Typography variant="body2" color="text.secondary">
+                        {order.customer.phone.replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3')}
+                      </Typography>
+                    )}
                     <Typography sx={{ fontWeight: 700 }}>
                       {formatCurrency(order.totalAmount)}
                     </Typography>
@@ -280,7 +321,16 @@ export function OrdersList(props: Props) {
                         {order.id.slice(0, 8)}
                       </Typography>
                     </TableCell>
-                    <TableCell sx={{ fontWeight: 600 }}>{order.customer.name}</TableCell>
+                    <TableCell>
+                      <Typography sx={{ fontWeight: 600 }}>
+                        {order.customer.name ?? 'Cliente não informado'}
+                      </Typography>
+                      {order.customer.phone && (
+                        <Typography variant="body2" color="text.secondary">
+                          {order.customer.phone.replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3')}
+                        </Typography>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <ItemsSummary order={order} />
                     </TableCell>
