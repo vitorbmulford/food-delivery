@@ -19,6 +19,7 @@ import com.foody.backend.orders.infrastructure.persistence.OrderRepository;
 import com.foody.backend.orders.infrastructure.persistence.OrderStatusHistoryRepository;
 import com.foody.backend.geocoding.application.GeocodingDispatcher;
 import com.foody.backend.geocoding.application.OrderGeocodingRequestedEvent;
+import com.foody.backend.orders.application.event.OrderStatusChangedEvent;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -84,7 +85,9 @@ public class OrderService {
         OrderStatus previousStatus = order.getStatus();
         Instant now = Instant.now();
         order.transitionTo(status, now);
-        statusHistory.save(new OrderStatusHistory(order, previousStatus, status, now, order.getCustomer()));
+        OrderStatusHistory history = statusHistory.save(new OrderStatusHistory(order, previousStatus, status, now, order.getCustomer()));
+        events.publishEvent(new OrderStatusChangedEvent(order.getId(), order.getCustomer().getId(), previousStatus,
+                status, history.getId(), history.getChangedAt()));
         return toResponse(order);
     }
 

@@ -152,6 +152,53 @@ Configure `NOMINATIM_BASE_URL`, `NOMINATIM_USER_AGENT`, `NOMINATIM_CONNECT_TIMEO
 
 A fila e o guard de duplicidade são somente em memória: tentativas em espera ou em andamento não são retomadas após reinício. O endpoint de reprocessamento é a recuperação manual segura. Os testes automatizados usam um servidor HTTP local simulado e nunca dependem do Nominatim público.
 
+## Atualizações em tempo real de pedidos
+
+O backend publica uma notificação STOMP depois que uma alteração de status é **confirmada no PostgreSQL**. Ela serve para atualizar a interface rapidamente; o histórico persistido e a API REST continuam sendo a fonte de verdade.
+
+- Endpoint WebSocket nativo: `ws://localhost:8080/ws`
+- Origem permitida: o valor de `FRONTEND_ORIGIN` (por padrão, `http://localhost:5173`)
+- Broker simples em memória: `/queue`
+- Prefixo de aplicação reservado: `/app`
+- Assinatura permitida para clientes: `/user/queue/orders`
+
+O JWT não vai na URL nem no handshake. Ele deve ser enviado no cabeçalho `Authorization` do frame STOMP `CONNECT`. O `sub` do token é o UUID do usuário e é associado ao `Principal` da sessão; por isso uma mensagem enviada a `/user/queue/orders` só é encaminhada às sessões daquele proprietário.
+
+```javascript
+import { Client } from "@stomp/stompjs";
+
+const client = new Client({
+  brokerURL: "ws://localhost:8080/ws",
+  connectHeaders: { Authorization: `Bearer ${token}` },
+  reconnectDelay: 5000
+});
+
+client.onConnect = () => {
+  client.subscribe("/user/queue/orders", frame => {
+    const event = JSON.parse(frame.body);
+    // atualize a timeline/pedido local
+  });
+};
+client.activate();
+```
+
+O payload é deliberadamente pequeno e não contém JWT, dados de endereço ou dados pessoais:
+
+```json
+{
+  "eventType": "ORDER_STATUS_CHANGED",
+  "orderId": "<uuid-do-pedido>",
+  "previousStatus": "RECEBIDO",
+  "newStatus": "EM_PREPARO",
+  "historyId": "<uuid-do-historico>",
+  "changedAt": "2026-10-16T20:00:00Z"
+}
+```
+
+O servidor rejeita `CONNECT` sem JWT válido, subscriptions diferentes de `/user/queue/orders` e todo frame `SEND` de clientes. Não há endpoint STOMP que altere pedidos: transições continuam exclusivamente em `PATCH /api/orders/{id}/status`.
+
+O evento só é emitido após o commit da transação que atualiza o pedido e cria o histórico; rollbacks, transições inválidas e acessos não autorizados não geram eventos. Como o broker é em memória, a entrega não é persistente nem exatamente uma vez. Caso o cliente desconecte, a mudança permanece salva e, após a reconexão automática do cliente, ele deve refazer `GET /api/orders` e/ou `GET /api/orders/{id}/history`.
+
 ## Fora do escopo
 
-Atualizações por WebSocket, mapas, rastreamento GPS, rotas, cálculo de distância/frete, catálogo, estoque, pagamentos e frontend React continuam fora do escopo.
+Mapas, rastreamento GPS, rotas, cálculo de distância/frete, catálogo, estoque, pagamentos e frontend React continuam fora do escopo.
