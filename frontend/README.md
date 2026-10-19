@@ -4,7 +4,7 @@ Aplicação web para a gestão da operação de delivery, construída com React,
 
 ## Requisitos
 
-- Node.js 20.19+ ou 22.12+
+- Node.js 20.19+, 22.12+ ou 24+
 - npm
 - Backend disponível em `http://localhost:8080` para login, cadastro, perfil e pedidos
 
@@ -18,17 +18,21 @@ cp .env.example .env
 npm run dev
 ```
 
-O Vite inicia o frontend em `http://localhost:5173`. As telas públicas abrem sem a API; login, cadastro e validação do perfil precisam do backend.
+O Vite inicia o frontend em `http://localhost:5173` e encaminha `/api` e `/ws` ao backend em `http://localhost:8080`, inclusive o Upgrade WebSocket. As telas públicas abrem sem a API; login, cadastro e validação do perfil precisam do backend.
 
 ## Variáveis de ambiente
 
-| Variável            | Descrição                           | Padrão local            |
-| ------------------- | ----------------------------------- | ----------------------- |
-| `VITE_API_BASE_URL` | URL base pública da API Spring Boot | `http://localhost:8080` |
+| Variável            | Descrição                                                        | Padrão local |
+| ------------------- | ---------------------------------------------------------------- | ------------ |
+| `VITE_API_BASE_URL` | URL base pública da API Spring Boot; vazia usa proxy same-origin | vazio        |
 
 As variáveis prefixadas com `VITE_` são incorporadas ao bundle e devem conter apenas valores públicos. Não coloque segredos no frontend. O exemplo de ambiente da raiz permanece dedicado ao Docker Compose.
 
-O backend precisa permitir a origem do frontend por `FRONTEND_ORIGIN` (localmente `http://localhost:5173`). Ele aceita os headers `Authorization` e `Content-Type`. `VITE_API_BASE_URL` configura somente a URL base pública do cliente HTTP.
+No desenvolvimento local, o backend precisa permitir `FRONTEND_ORIGIN=http://localhost:5173`; em Docker, o padrão é `http://localhost:3000`. Configure a origem para o host e porta realmente usados no navegador. O backend aceita os headers `Authorization` e `Content-Type`. `VITE_API_BASE_URL` configura somente a URL base pública do cliente HTTP; não inclua segredos nessa variável.
+
+## Execução com Docker Compose
+
+Na raiz do repositório, configure `JWT_SECRET` no `.env` (copie `.env.example` e substitua o marcador) e execute `docker compose up --build -d`. A aplicação estará em `http://localhost:3000`; o Nginx encaminha `/api` e `/ws` ao Spring Boot e usa `index.html` como fallback das rotas SPA. Em produção com HTTPS, use `AUTH_COOKIE_SECURE=true`.
 
 ## Autenticação
 

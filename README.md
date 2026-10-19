@@ -1,4 +1,4 @@
-# Mini Rastreador de Pedidos — Foody Delivery
+# Foody Delivery
 
 Backend de um desafio técnico para uma aplicação simplificada de gerenciamento e acompanhamento de pedidos de delivery.
 
@@ -43,17 +43,21 @@ Para iniciar somente PostgreSQL:
 docker compose up -d postgres
 ```
 
-Para iniciar todos os serviços:
+Para iniciar PostgreSQL, backend e frontend em containers:
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
-A API fica em `http://localhost:8080` e o Swagger em `/swagger-ui/index.html`. Para encerrar preservando os dados, execute `docker compose down`.
+Não é necessário executar `npm install` ou `npm ci` na máquina para usar o Compose. O build multi-stage do frontend instala as dependências dentro da imagem Docker. `npm ci` é necessário apenas para executar o Vite localmente, fora dos containers.
+
+Abra a aplicação em `http://localhost:3000`. O Nginx serve a SPA com fallback para as rotas do React Router e encaminha `/api` e `/ws` (WebSocket Upgrade/STOMP) ao backend. O Swagger fica disponível em `http://localhost:8080/swagger-ui/index.html`. As portas publicadas podem ser alteradas por `FRONTEND_PORT`, `BACKEND_PORT` e `POSTGRES_PORT` no `.env`. O backend só fica pronto após o PostgreSQL e o healthcheck do Actuator; o frontend aguarda o backend saudável. Para encerrar os containers sem remover os dados, execute `docker compose down` (não use `-v`).
+
+O Compose requer `JWT_SECRET` local com pelo menos 32 bytes; gere um com `openssl rand -base64 32` e grave apenas no `.env` ignorado pelo Git. `FRONTEND_ORIGIN` aceita origens exatas separadas por vírgula; o exemplo permite a interface Docker em `localhost:3000` e o Vite em `localhost:5173`. Ao publicar, substitua pelas origens realmente usadas. Em produção HTTPS, configure `AUTH_COOKIE_SECURE=true`. O bundle usa caminhos relativos por padrão. `VITE_API_BASE_URL` só deve ser definido para uma URL pública intencional, nunca para um segredo.
 
 ## Frontend
 
-O frontend React + TypeScript + Vite fica em `frontend/`. Para instalar dependências e iniciar o servidor de desenvolvimento, execute `npm install` e `npm run dev` nesse diretório. Os requisitos, variáveis de ambiente e demais scripts estão documentados em [frontend/README.md](frontend/README.md).
+O frontend React + TypeScript + Vite fica em `frontend/`. Para instalar dependências e iniciar o servidor de desenvolvimento, execute `npm ci` e `npm run dev` nesse diretório. O Vite encaminha `/api` e `/ws` ao backend local em `http://localhost:8080`; assim, cookies e STOMP permanecem same-origin no navegador. Os requisitos, variáveis de ambiente e demais scripts estão documentados em [frontend/README.md](frontend/README.md).
 
 ## Autenticação
 
@@ -101,12 +105,17 @@ Exemplo de criação:
 ```json
 {
   "items": [
-    { "productName": "Hambúrguer Artesanal", "quantity": 2, "unitPrice": 32.90 },
-    { "productName": "Refrigerante", "quantity": 1, "unitPrice": 8.50 }
+    { "productName": "Hambúrguer Artesanal", "quantity": 2, "unitPrice": 32.9 },
+    { "productName": "Refrigerante", "quantity": 1, "unitPrice": 8.5 }
   ],
   "deliveryAddress": {
-    "street": "Rua das Flores", "number": "120", "complement": "Apto 42",
-    "neighborhood": "Centro", "city": "São Paulo", "state": "SP", "postalCode": "01001000"
+    "street": "Rua das Flores",
+    "number": "120",
+    "complement": "Apto 42",
+    "neighborhood": "Centro",
+    "city": "São Paulo",
+    "state": "SP",
+    "postalCode": "01001000"
   }
 }
 ```
@@ -115,13 +124,13 @@ Itens exigem nome, quantidade maior que zero e preço unitário maior que zero; 
 
 ### Máquina de estados
 
-| Status atual | Próximos status permitidos |
-| --- | --- |
-| `RECEBIDO` | `EM_PREPARO`, `CANCELADO` |
-| `EM_PREPARO` | `SAIU_PARA_ENTREGA`, `CANCELADO` |
-| `SAIU_PARA_ENTREGA` | `ENTREGUE` |
-| `ENTREGUE` | nenhum |
-| `CANCELADO` | nenhum |
+| Status atual        | Próximos status permitidos       |
+| ------------------- | -------------------------------- |
+| `RECEBIDO`          | `EM_PREPARO`, `CANCELADO`        |
+| `EM_PREPARO`        | `SAIU_PARA_ENTREGA`, `CANCELADO` |
+| `SAIU_PARA_ENTREGA` | `ENTREGUE`                       |
+| `ENTREGUE`          | nenhum                           |
+| `CANCELADO`         | nenhum                           |
 
 Transições inválidas e conflitos de atualização concorrente retornam `409 Conflict`; status ausente ou inválido retornam `400 Bad Request`. Para demonstrar o fluxo do MVP, o próprio cliente pode avançar o status. Em produção, esse endpoint deve ser limitado a restaurante, operação ou logística autorizados.
 
@@ -133,8 +142,18 @@ Cada pedido criado após a migration V4 ganha, na mesma transação, um evento i
 
 ```json
 [
-  { "previousStatus": null, "newStatus": "RECEBIDO", "changedAt": "2026-10-16T19:30:00Z", "changedBy": "<user-uuid>" },
-  { "previousStatus": "RECEBIDO", "newStatus": "EM_PREPARO", "changedAt": "2026-10-16T19:40:00Z", "changedBy": "<user-uuid>" }
+  {
+    "previousStatus": null,
+    "newStatus": "RECEBIDO",
+    "changedAt": "2026-10-16T19:30:00Z",
+    "changedBy": "<user-uuid>"
+  },
+  {
+    "previousStatus": "RECEBIDO",
+    "newStatus": "EM_PREPARO",
+    "changedAt": "2026-10-16T19:40:00Z",
+    "changedBy": "<user-uuid>"
+  }
 ]
 ```
 
@@ -183,11 +202,11 @@ import { Client } from "@stomp/stompjs";
 const client = new Client({
   brokerURL: "ws://localhost:8080/ws",
   connectHeaders: { Authorization: `Bearer ${token}` },
-  reconnectDelay: 5000
+  reconnectDelay: 5000,
 });
 
 client.onConnect = () => {
-  client.subscribe("/user/queue/orders", frame => {
+  client.subscribe("/user/queue/orders", (frame) => {
     const event = JSON.parse(frame.body);
     // atualize a timeline/pedido local
   });

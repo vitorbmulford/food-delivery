@@ -5,6 +5,10 @@ import { apiClient } from './client'
 import { setAccessToken } from '../../features/auth/session'
 
 describe('apiClient autenticação', () => {
+  it('usa caminhos relativos para permitir proxy same-origin em desenvolvimento e produção', () => {
+    expect(apiClient.defaults.baseURL).toBe('')
+  })
+
   afterEach(() => {
     setAccessToken(null)
     vi.restoreAllMocks()

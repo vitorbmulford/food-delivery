@@ -4,3 +4,10 @@ target/
 .gitignore
 HELP.md
 *.log
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks

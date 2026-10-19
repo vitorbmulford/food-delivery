@@ -97,7 +97,9 @@ describe('OrderRealtimeProvider', () => {
     renderRealtime(queryClient)
 
     await waitFor(() => expect(mockClients).toHaveLength(1))
-    expect(clientAt(0).options.brokerURL).toBe('ws://localhost:8080/ws')
+    expect(clientAt(0).options.brokerURL).toBe(
+      `${window.location.origin.replace(/^http/, 'ws')}/ws`,
+    )
     expect(clientAt(0).connectHeaders).toEqual({ Authorization: 'Bearer memory-access-token' })
     act(() => (clientAt(0).options.onConnect as () => void)())
     expect(clientAt(0).subscribe).toHaveBeenCalledWith('/user/queue/orders', expect.any(Function))
