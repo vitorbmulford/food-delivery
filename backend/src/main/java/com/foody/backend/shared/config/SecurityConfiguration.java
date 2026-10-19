@@ -1,6 +1,9 @@
 package com.foody.backend.shared.config;
 
 import com.foody.backend.auth.infrastructure.security.JwtProperties;
+import com.foody.backend.shared.ratelimit.RateLimitFilter;
+import com.foody.backend.shared.ratelimit.RateLimitProperties;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import com.nimbusds.jose.proc.SecurityContext;
 import java.nio.charset.StandardCharsets;
@@ -23,6 +26,7 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -84,17 +88,21 @@ public class SecurityConfiguration {
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    RateLimitFilter rateLimitFilter(RateLimitProperties properties, MeterRegistry meterRegistry) { return new RateLimitFilter(properties, meterRegistry); }
+
+    @Bean
+    SecurityFilterChain securityFilterChain(HttpSecurity http, RateLimitFilter rateLimitFilter) throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> {})
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         // A identidade da conexão WebSocket é estabelecida pelo frame STOMP CONNECT.
-                        .requestMatchers("/api/auth/register", "/api/auth/login", "/ws/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/api/auth/register", "/api/auth/login", "/ws/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/health/**").permitAll()
                         .requestMatchers("/api/users/me", "/api/orders/**").authenticated()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))
+                .addFilterAfter(rateLimitFilter, BearerTokenAuthenticationFilter.class)
                 .build();
     }
 }

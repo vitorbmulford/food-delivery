@@ -29,6 +29,49 @@ geocoding:
     user-agent: "${NOMINATIM_USER_AGENT:foody-delivery/1.0 (contact: admin@example.com)}"
     connect-timeout: ${NOMINATIM_CONNECT_TIMEOUT:2s}
     read-timeout: ${NOMINATIM_READ_TIMEOUT:5s}
+app:
+  geocoding-resilience:
+    retry:
+      max-attempts: ${NOMINATIM_RETRY_MAX_ATTEMPTS:3}
+      initial-delay: ${NOMINATIM_RETRY_INITIAL_DELAY:1s}
+      max-delay: ${NOMINATIM_RETRY_MAX_DELAY:5s}
+      multiplier: ${NOMINATIM_RETRY_MULTIPLIER:2.0}
+      jitter: ${NOMINATIM_RETRY_JITTER:0.2}
+    circuit-breaker:
+      sliding-window-size: ${NOMINATIM_CIRCUIT_WINDOW:10}
+      minimum-number-of-calls: ${NOMINATIM_CIRCUIT_MIN_CALLS:5}
+      failure-rate-threshold: ${NOMINATIM_CIRCUIT_FAILURE_RATE:50}
+      wait-duration-in-open-state: ${NOMINATIM_CIRCUIT_OPEN_DURATION:30s}
+      permitted-calls-in-half-open-state: ${NOMINATIM_CIRCUIT_HALF_OPEN_CALLS:2}
+  rate-limit:
+    login:
+      capacity: ${RATE_LIMIT_LOGIN_CAPACITY:10}
+      period: ${RATE_LIMIT_LOGIN_PERIOD:1m}
+    register:
+      capacity: ${RATE_LIMIT_REGISTER_CAPACITY:5}
+      period: ${RATE_LIMIT_REGISTER_PERIOD:1m}
+    geocoding:
+      capacity: ${RATE_LIMIT_GEOCODING_CAPACITY:3}
+      period: ${RATE_LIMIT_GEOCODING_PERIOD:1m}
+    bucket-idle-ttl: ${RATE_LIMIT_BUCKET_IDLE_TTL:15m}
+    max-buckets: ${RATE_LIMIT_MAX_BUCKETS:10000}
+  logging:
+    correlation-header: X-Correlation-ID
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
 server:
   port: ${SERVER_PORT:8080}
 logging:

@@ -1,6 +1,9 @@
 package com.foody.backend.shared.security;
 
 import java.util.List;
+import java.util.UUID;
+import java.util.regex.Pattern;
+import org.slf4j.MDC;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessageDeliveryException;
@@ -21,6 +24,7 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 @Component
 public class WebSocketJwtAuthenticationInterceptor implements ChannelInterceptor {
     private static final String ORDERS_DESTINATION = "/user/queue/orders";
+    private static final Pattern CORRELATION_ID = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,63}");
     private final JwtDecoder jwtDecoder;
 
     public WebSocketJwtAuthenticationInterceptor(JwtDecoder jwtDecoder) {
@@ -33,6 +37,8 @@ public class WebSocketJwtAuthenticationInterceptor implements ChannelInterceptor
         if (accessor == null) {
             accessor = StompHeaderAccessor.wrap(message);
         }
+        String correlationId = accessor.getFirstNativeHeader("X-Correlation-ID");
+        MDC.put("correlationId", correlationId != null && CORRELATION_ID.matcher(correlationId).matches() ? correlationId : UUID.randomUUID().toString());
         StompCommand command = accessor.getCommand();
         if (command == null) {
             return message; // heartbeat
@@ -51,7 +57,6 @@ public class WebSocketJwtAuthenticationInterceptor implements ChannelInterceptor
         if (StompCommand.SEND.equals(command)) {
             throw denied("Client SEND frames are not permitted");
         }
-        // Spring can synthesize DISCONNECT after a transport failure without session headers.
         if (StompCommand.DISCONNECT.equals(command)) {
             return message;
         }
@@ -60,6 +65,11 @@ public class WebSocketJwtAuthenticationInterceptor implements ChannelInterceptor
             return message;
         }
         throw denied("STOMP command is not permitted");
+    }
+
+    @Override
+    public void afterSendCompletion(Message<?> message, MessageChannel channel, boolean sent, Exception exception) {
+        MDC.remove("correlationId");
     }
 
     private AbstractAuthenticationToken authenticate(String authorization) {

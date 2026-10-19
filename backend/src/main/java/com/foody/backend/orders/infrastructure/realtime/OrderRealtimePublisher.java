@@ -22,6 +22,7 @@ public class OrderRealtimePublisher {
             messaging.convertAndSendToUser(event.ownerId().toString(), "/queue/orders",
                     new OrderStatusChangedMessage("ORDER_STATUS_CHANGED", event.orderId(), event.previousStatus(),
                             event.newStatus(), event.historyId(), event.changedAt()));
+            log.info("Order status notification published operation=order.status.websocket orderId={} outcome=SUCCESS", event.orderId());
         } catch (RuntimeException exception) {
             // Delivery is best effort; the committed timeline remains the source of truth.
             log.warn("Could not publish status notification for order {}", event.orderId(), exception);

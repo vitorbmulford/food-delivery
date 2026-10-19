@@ -14,3 +14,23 @@ geocoding:
     user-agent: "foody-delivery-test/1.0 (contact: test@example.com)"
     connect-timeout: 50ms
     read-timeout: 50ms
+app:
+  geocoding-resilience:
+    retry:
+      max-attempts: 2
+      initial-delay: 1ms
+      max-delay: 5ms
+      multiplier: 2.0
+      jitter: 0.0
+    circuit-breaker:
+      sliding-window-size: 4
+      minimum-number-of-calls: 2
+      failure-rate-threshold: 50
+      wait-duration-in-open-state: 250ms
+      permitted-calls-in-half-open-state: 1
+  rate-limit:
+    login: { capacity: 1000, period: 1m }
+    register: { capacity: 1000, period: 1m }
+    geocoding: { capacity: 1000, period: 1m }
+    bucket-idle-ttl: 1m
+    max-buckets: 100
