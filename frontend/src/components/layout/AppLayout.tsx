@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Menu } from 'lucide-react'
-import { Box, Drawer, IconButton, useMediaQuery, useTheme } from '@mui/material'
+import { Box, Drawer, IconButton, Typography, useMediaQuery, useTheme } from '@mui/material'
 import { Outlet } from 'react-router'
 import { Sidebar } from './Sidebar'
+import { useAuth } from '../../features/auth/context/useAuth'
+import { useOrderRealtimeStatus } from '../../features/orders/realtime/useOrderRealtimeStatus'
 
 export const SIDEBAR_EXPANDED_WIDTH = 256
 export const SIDEBAR_COLLAPSED_WIDTH = 76
@@ -10,6 +12,8 @@ export const SIDEBAR_COLLAPSED_WIDTH = 76
 export function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const { isAuthenticated } = useAuth()
+  const realtimeStatus = useOrderRealtimeStatus()
   const theme = useTheme()
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'))
   const sidebarWidth = collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH
@@ -99,9 +103,40 @@ export function AppLayout() {
             pt: { xs: 8, sm: 8, md: 4 },
           }}
         >
+          {isAuthenticated && (
+            <Box
+              aria-live="polite"
+              aria-label={`Atualizações em tempo real: ${realtimeStatusLabel(realtimeStatus)}`}
+              sx={{ display: 'flex', justifyContent: 'flex-end', minHeight: 20, mb: 1 }}
+            >
+              <Typography
+                variant="caption"
+                color={realtimeStatus === 'connected' ? 'success.main' : 'text.secondary'}
+                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}
+              >
+                <Box
+                  component="span"
+                  aria-hidden="true"
+                  sx={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    bgcolor: realtimeStatus === 'connected' ? 'success.main' : 'warning.main',
+                  }}
+                />
+                {realtimeStatusLabel(realtimeStatus)}
+              </Typography>
+            </Box>
+          )}
           <Outlet />
         </Box>
       </Box>
     </Box>
   )
+}
+
+function realtimeStatusLabel(status: 'connected' | 'reconnecting' | 'disconnected') {
+  if (status === 'connected') return 'Conectado'
+  if (status === 'reconnecting') return 'Reconectando'
+  return 'Desconectado'
 }

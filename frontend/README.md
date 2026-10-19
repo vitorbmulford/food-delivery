@@ -39,6 +39,14 @@ O backend precisa permitir a origem do frontend por `FRONTEND_ORIGIN` (localment
 - O perfil é obtido de `GET /api/users/me`; nome e e-mail aparecem no menu de perfil da barra lateral recolhível.
 - Logout, resposta `401` de uma chamada privada ou falha na consulta de `/me` remove a sessão e os dados em cache.
 
+## Atualizações em tempo real
+
+- Com uma sessão autenticada, o frontend abre uma conexão STOMP em `/ws` (host derivado de `VITE_API_BASE_URL`) e envia `Authorization: Bearer <accessToken>` somente no frame STOMP `CONNECT`. O JWT continua apenas em memória; não é colocado na URL, `localStorage` ou `sessionStorage`.
+- A única subscription é o destino privado `/user/queue/orders`. O backend envia `ORDER_STATUS_CHANGED` depois do commit, com `orderId`, `previousStatus`, `newStatus`, `historyId` e `changedAt`. O evento é validado e usado como sinal para invalidar as queries REST das listas, do detalhe e do histórico desse pedido; o cache permanece sob controle do TanStack Query.
+- Reconexões usam backoff exponencial limitado a 30 segundos. Antes de cada tentativa de reconexão, o cliente usa `POST /api/auth/refresh` e o cookie HttpOnly existente para obter um access token novo. Falha definitiva aciona o evento de expiração já consumido pelo fluxo de logout. Eventos de rede `online` e `offline` interrompem ou retomam as tentativas.
+- O indicador discreto no layout autenticado mostra conectado, reconectando ou desconectado. A aplicação continua usando REST quando STOMP está indisponível; filtros e paginação permanecem na URL e a query ativa é refeita com os mesmos parâmetros.
+- O WebSocket do backend publica mudanças de status, não conclusão de geocodificação. Por isso, o polling atual do detalhe permanece limitado a cinco segundos por até dois minutos enquanto `geocodingStatus` está `PENDING` e a página está visível.
+
 O access token fica em memória e dura 3600 segundos por padrão (`JWT_EXPIRATION_SECONDS`). A sessão persistente usa um cookie `HttpOnly`, `SameSite=Strict`, renovado por até 400 dias a cada uso e revogado no logout. Configure `AUTH_COOKIE_SECURE=true` em produção com HTTPS.
 
 Tokens em memória não persistem entre recargas, mas continuam acessíveis a JavaScript enquanto a página está aberta. Isso não oferece a proteção de um cookie `HttpOnly`.
