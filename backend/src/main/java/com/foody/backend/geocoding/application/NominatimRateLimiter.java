@@ -15,4 +15,8 @@ class NominatimRateLimiter {
         }
         nextRequestAt = Instant.now().plusSeconds(1);
     }
+
+    synchronized void deferUntil(Instant notBefore) {
+        if (notBefore.isAfter(nextRequestAt)) nextRequestAt = notBefore;
+    }
 }

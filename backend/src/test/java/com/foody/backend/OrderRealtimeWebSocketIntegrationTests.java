@@ -47,6 +47,10 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.slf4j.LoggerFactory;
 
 @Import({TestcontainersConfiguration.class, OrderRealtimeWebSocketIntegrationTests.ConcurrencyTestConfiguration.class})
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -101,6 +105,40 @@ class OrderRealtimeWebSocketIntegrationTests {
     }
 
     @Test
+    void preservesHttpCorrelationIdAtAfterCommitStompPublication() throws Exception {
+        String token = registerAndLogin("realtime-correlation@example.com");
+        String orderId = JsonPath.read(request("POST", "/api/orders", token, ORDER).body(), "$.id");
+        CountDownLatch received = new CountDownLatch(1);
+        WebSocketStompClient stomp = new WebSocketStompClient(new StandardWebSocketClient());
+        stomp.setTaskScheduler(new ConcurrentTaskScheduler());
+        StompSession session = connect(stomp, token);
+        Logger logger = (Logger) LoggerFactory.getLogger(com.foody.backend.orders.infrastructure.realtime.OrderRealtimePublisher.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start(); logger.addAppender(appender);
+        try {
+            subscribe(session, received, new AtomicReference<>());
+            awaitSubscription();
+            String correlationId = "status-transition-42";
+            HttpRequest updateRequest = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/orders/" + orderId + "/status"))
+                    .header("Authorization", "Bearer " + token).header("Content-Type", "application/json")
+                    .header("X-Correlation-ID", correlationId).method("PATCH", HttpRequest.BodyPublishers.ofString("{\"status\":\"EM_PREPARO\"}"))
+                    .build();
+            HttpResponse<String> update = HttpClient.newHttpClient().send(updateRequest, HttpResponse.BodyHandlers.ofString());
+            assertThat(update.statusCode()).isEqualTo(200);
+            assertThat(update.headers().firstValue("X-Correlation-ID")).contains(correlationId);
+            assertThat(received.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(appender.list).anySatisfy(event -> {
+                assertThat(event.getFormattedMessage()).contains("Order status notification published");
+                assertThat(event.getMDCPropertyMap()).containsEntry("correlationId", correlationId);
+            });
+        } finally {
+            logger.detachAppender(appender); appender.stop();
+            if (session.isConnected()) session.disconnect();
+            stomp.stop();
+        }
+    }
+
+    @Test
     void publishesAfterCommitButNotAfterRollback() throws Exception {
         String token = registerAndLogin("realtime-rollback@example.com");
         String createdOrder = request("POST", "/api/orders", token, ORDER).body();
@@ -149,10 +187,24 @@ class OrderRealtimeWebSocketIntegrationTests {
             subscribe(session, new CountDownLatch(1), new AtomicReference<>(), events);
             awaitSubscription();
             readGate.arm();
-            Future<?> winner = executor.submit(() -> transactions.executeWithoutResult(status ->
-                    orderService.updateStatus(ownerId, id, OrderStatus.EM_PREPARO)));
-            Future<?> loser = executor.submit(() -> transactions.executeWithoutResult(status ->
-                    orderService.updateStatus(ownerId, id, OrderStatus.CANCELADO)));
+            Future<?> winner = executor.submit(() -> {
+                readGate.markWinner();
+                try {
+                    transactions.executeWithoutResult(status ->
+                            orderService.updateStatus(ownerId, id, OrderStatus.EM_PREPARO));
+                } finally {
+                    readGate.clearRole();
+                }
+            });
+            Future<?> loser = executor.submit(() -> {
+                readGate.markLoser();
+                try {
+                    transactions.executeWithoutResult(status ->
+                            orderService.updateStatus(ownerId, id, OrderStatus.CANCELADO));
+                } finally {
+                    readGate.clearRole();
+                }
+            });
             assertThat(readGate.bothLoaded.await(5, TimeUnit.SECONDS)).isTrue();
             readGate.releaseWinner.countDown();
             winner.get(5, TimeUnit.SECONDS);
@@ -237,6 +289,19 @@ class OrderRealtimeWebSocketIntegrationTests {
         private CountDownLatch bothLoaded = new CountDownLatch(0);
         private CountDownLatch releaseWinner = new CountDownLatch(0);
         private CountDownLatch releaseLoser = new CountDownLatch(0);
+        private final ThreadLocal<CountDownLatch> releaseForCurrentOperation = new ThreadLocal<>();
+
+        void markWinner() {
+            releaseForCurrentOperation.set(releaseWinner);
+        }
+
+        void markLoser() {
+            releaseForCurrentOperation.set(releaseLoser);
+        }
+
+        void clearRole() {
+            releaseForCurrentOperation.remove();
+        }
 
         void arm() {
             bothLoaded = new CountDownLatch(2);
@@ -249,8 +314,9 @@ class OrderRealtimeWebSocketIntegrationTests {
             Object result = joinPoint.proceed();
             if (bothLoaded.getCount() == 0) return result;
             bothLoaded.countDown();
-            if (Thread.currentThread().getName().contains("1")) releaseWinner.await(5, TimeUnit.SECONDS);
-            else releaseLoser.await(5, TimeUnit.SECONDS);
+            CountDownLatch release = releaseForCurrentOperation.get();
+            if (release == null) throw new IllegalStateException("Concurrent status transition role was not set");
+            release.await(5, TimeUnit.SECONDS);
             return result;
         }
     }
