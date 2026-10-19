@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '../../../lib/api/client'
-import { createOrder, listOrders, updateOrderStatus } from './ordersApi'
+import { createOrder, getOrderHistory, listOrders, updateOrderStatus } from './ordersApi'
 
 vi.mock('../../../lib/api/client', () => ({
   apiClient: { get: vi.fn(), post: vi.fn(), patch: vi.fn() },
@@ -39,6 +39,21 @@ describe('API de pedidos', () => {
 
     await createOrder(payload)
     expect(apiClient.post).toHaveBeenCalledWith('/api/orders', payload)
+  })
+
+  it('consulta o histórico do endpoint autenticado do pedido', async () => {
+    const history = [
+      {
+        id: 'event-1',
+        previousStatus: null,
+        newStatus: 'RECEBIDO',
+        changedAt: '2026-10-19T12:00:00Z',
+        changedBy: 'user-1',
+      },
+    ]
+    vi.mocked(apiClient.get).mockResolvedValue({ data: history })
+    await expect(getOrderHistory('order-1')).resolves.toEqual(history)
+    expect(apiClient.get).toHaveBeenCalledWith('/api/orders/order-1/history')
   })
 
   it('envia o status real no PATCH e propaga erros da API', async () => {

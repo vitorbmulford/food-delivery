@@ -81,7 +81,11 @@ src/
 - `/orders/new`
 - `/orders/:id`
 
-Endereços desconhecidos exibem a página de fallback. `/orders` lista pedidos reais com paginação e filtro por status sincronizados à URL. `/orders/new` cria pedidos por formulário validado e `/orders/:id` apresenta um resumo consultado na API. As transições de status seguem as regras do backend, que calcula o total. O dashboard permanece sem indicadores fictícios.
+Endereços desconhecidos exibem a página de fallback. `/orders` lista pedidos reais com paginação e filtro por status sincronizados à URL. `/orders/new` cria pedidos por formulário validado e `/orders/:id` mostra o pedido consultado na API, itens, endereço, cliente, totais, andamento resumido e histórico real de mudanças. UUIDs inválidos são barrados antes da consulta; pedidos ausentes ou inacessíveis recebem o estado de não encontrado.
+
+Os detalhes usam `GET /api/orders/{id}` e o histórico usa `GET /api/orders/{id}/history`. O histórico é exibido em ordem cronológica com status anterior/novo, horário e identificador do responsável quando disponível. A consulta do histórico falha de forma independente: se ela estiver indisponível, os detalhes continuam visíveis e há uma opção para tentar novamente. O indicador de progresso resume o fluxo possível (`RECEBIDO` → `EM_PREPARO` → `SAIU_PARA_ENTREGA` → `ENTREGUE`); pedidos cancelados são mostrados separadamente e eventos realmente ocorridos aparecem somente na timeline.
+
+As ações chamam `PATCH /api/orders/{id}/status` com `{ "status": "..." }`. O frontend oferece as transições aceitas pelo backend: recebido para preparo ou cancelado; preparo para saiu para entrega ou cancelado; saiu para entrega para entregue. Entregue e cancelado são estados finais. Cancelamentos pedem confirmação. Uma resposta `409` causa recarga dos detalhes, do histórico e das listas, e os erros de rede/API mostram mensagens seguras com opção de nova tentativa quando aplicável. Os dados detalhados e o histórico usam chaves privadas do TanStack Query; logout e expiração continuam limpando o cache pelo fluxo de sessão existente.
 
 ## Testes
 

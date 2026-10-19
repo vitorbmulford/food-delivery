@@ -79,7 +79,7 @@ describe('autenticação e rotas', () => {
 
   it('redireciona usuário anônimo de rota protegida para login e retorna à rota após autenticar', async () => {
     const user = userEvent.setup()
-    renderRoute('/orders/ord-123?view=history')
+    renderRoute('/orders/7a5f6462-dd57-4fef-aed2-8825b85cef0b?view=history')
 
     expect(await screen.findByRole('heading', { name: 'Entrar' })).toBeInTheDocument()
     await user.type(screen.getByLabelText('E-mail'), 'ana@example.com')
@@ -87,7 +87,6 @@ describe('autenticação e rotas', () => {
     await user.click(screen.getByRole('button', { name: 'Entrar' }))
 
     expect(await screen.findByRole('heading', { name: 'Detalhes do pedido' })).toBeInTheDocument()
-    expect(screen.getByText('ord-123')).toBeInTheDocument()
     expect(login).toHaveBeenCalledWith({ email: 'ana@example.com', password: 'Senha123!' })
     expect(getCurrentUser).toHaveBeenCalledTimes(1)
   })

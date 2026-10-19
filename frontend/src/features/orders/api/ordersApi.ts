@@ -1,5 +1,12 @@
 import { apiClient } from '../../../lib/api/client'
-import type { CreateOrderInput, Order, OrderFilters, OrderPage, OrderStatus } from '../types/order'
+import type {
+  CreateOrderInput,
+  Order,
+  OrderFilters,
+  OrderPage,
+  OrderStatus,
+  OrderStatusHistory,
+} from '../types/order'
 
 export async function listOrders(filters: OrderFilters) {
   const { data } = await apiClient.get<OrderPage>('/api/orders', {
@@ -14,6 +21,11 @@ export async function listOrders(filters: OrderFilters) {
 
 export async function getOrder(id: string) {
   const { data } = await apiClient.get<Order>(`/api/orders/${id}`)
+  return data
+}
+
+export async function getOrderHistory(id: string) {
+  const { data } = await apiClient.get<OrderStatusHistory[]>(`/api/orders/${id}/history`)
   return data
 }
 

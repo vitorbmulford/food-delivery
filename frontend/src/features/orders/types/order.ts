@@ -42,6 +42,14 @@ export type Order = {
   geocodingStatus: string
 }
 
+export type OrderStatusHistory = {
+  id: string
+  previousStatus: OrderStatus | null
+  newStatus: OrderStatus
+  changedAt: string
+  changedBy: string | null
+}
+
 export type OrderPage = {
   content: Order[]
   page: {

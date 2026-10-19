@@ -8,11 +8,18 @@ import {
   DialogTitle,
   Stack,
 } from '@mui/material'
+import { ArrowRight, X } from 'lucide-react'
 import { allowedNextStatuses, type Order, type OrderStatus } from '../types/order'
 import { useUpdateOrderStatus } from '../hooks/useOrders'
 import { getOrderErrorMessage } from '../utils/orderFormat'
 
-export function OrderStatusActions({ order }: { order: Order }) {
+export function OrderStatusActions({
+  order,
+  compact = false,
+}: {
+  order: Order
+  compact?: boolean
+}) {
   const [confirmCancel, setConfirmCancel] = useState(false)
   const update = useUpdateOrderStatus()
   const nextStatuses = allowedNextStatuses[order.status]
@@ -29,12 +36,20 @@ export function OrderStatusActions({ order }: { order: Order }) {
   const changeStatus = (status: OrderStatus) => update.mutate({ id: order.id, status })
 
   return (
-    <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+    <Stack
+      role="group"
+      aria-label="Ações disponíveis para este pedido"
+      direction="row"
+      spacing={1.25}
+      sx={{ flexWrap: 'wrap', alignItems: 'center' }}
+    >
       {transitionStatuses.map((status) => (
         <Button
           key={status}
           size="small"
           variant="outlined"
+          endIcon={<ArrowRight size={16} aria-hidden="true" />}
+          sx={compact ? { minWidth: 0, px: 1.5, py: 0.75 } : undefined}
           disabled={update.isPending}
           onClick={() => changeStatus(status)}
         >
@@ -49,6 +64,9 @@ export function OrderStatusActions({ order }: { order: Order }) {
         <Button
           size="small"
           color="error"
+          variant={compact ? 'outlined' : 'text'}
+          startIcon={<X size={15} aria-hidden="true" />}
+          sx={compact ? { minWidth: 0, px: 1.5, py: 0.75 } : undefined}
           disabled={update.isPending}
           onClick={() => setConfirmCancel(true)}
         >
@@ -59,7 +77,7 @@ export function OrderStatusActions({ order }: { order: Order }) {
       {update.isError && (
         <Alert severity="error" sx={{ mt: 1 }}>
           {isConflict
-            ? 'O status mudou em outra operação. A lista foi atualizada.'
+            ? 'O pedido foi alterado em outra operação. Os dados atuais foram recarregados.'
             : getOrderErrorMessage(update.error, 'Não foi possível atualizar o pedido.')}
         </Alert>
       )}

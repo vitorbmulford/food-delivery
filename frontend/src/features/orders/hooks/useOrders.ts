@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createOrder, getOrder, listOrders, updateOrderStatus } from '../api/ordersApi'
+import {
+  createOrder,
+  getOrder,
+  getOrderHistory,
+  listOrders,
+  updateOrderStatus,
+} from '../api/ordersApi'
 import type { CreateOrderInput, OrderFilters, OrderStatus } from '../types/order'
 
 export const orderKeys = {
@@ -7,17 +13,26 @@ export const orderKeys = {
   lists: () => [...orderKeys.all, 'list'] as const,
   list: (filters: OrderFilters) => [...orderKeys.lists(), filters] as const,
   detail: (id: string) => [...orderKeys.all, 'detail', id] as const,
+  history: (id: string) => [...orderKeys.all, 'history', id] as const,
+}
+
+export function useOrderHistory(id: string, enabled = true) {
+  return useQuery({
+    queryKey: orderKeys.history(id),
+    queryFn: () => getOrderHistory(id),
+    enabled: Boolean(id) && enabled,
+  })
 }
 
 export function useOrders(filters: OrderFilters) {
   return useQuery({ queryKey: orderKeys.list(filters), queryFn: () => listOrders(filters) })
 }
 
-export function useOrder(id: string) {
+export function useOrder(id: string, enabled = true) {
   return useQuery({
     queryKey: orderKeys.detail(id),
     queryFn: () => getOrder(id),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && enabled,
   })
 }
 
@@ -39,10 +54,22 @@ export function useUpdateOrderStatus() {
       updateOrderStatus(id, status),
     onSuccess: (order) => {
       queryClient.setQueryData(orderKeys.detail(order.id), order)
-      return queryClient.invalidateQueries({ queryKey: orderKeys.lists() })
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: orderKeys.history(order.id) }),
+        queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
+      ])
     },
-    onError: async (error) => {
-      if (isConflict(error)) await queryClient.invalidateQueries({ queryKey: orderKeys.all })
+    onError: async (error, variables) => {
+      if (isConflict(error)) {
+        const invalidations = [queryClient.invalidateQueries({ queryKey: orderKeys.lists() })]
+        invalidations.push(
+          queryClient.invalidateQueries({ queryKey: orderKeys.detail(variables.id) }),
+        )
+        invalidations.push(
+          queryClient.invalidateQueries({ queryKey: orderKeys.history(variables.id) }),
+        )
+        await Promise.all(invalidations)
+      }
     },
   })
 }
