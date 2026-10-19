@@ -31,6 +31,7 @@ openssl rand -base64 32
 ```
 
 A chave JWT deve ser texto de 32+ caracteres ou Base64 que represente pelo menos 32 bytes. Nunca versione a chave real. O `.env.example` contém apenas valores de desenvolvimento e marcadores de exemplo.
+Em produção, sirva frontend e backend via HTTPS e configure `AUTH_COOKIE_SECURE=true` para proteger o cookie persistente da sessão.
 
 Para executar o backend diretamente pelo IntelliJ ou Maven, inicie o PostgreSQL em Compose e mantenha o diretório de trabalho como `backend/`. O Spring Boot importa um `.env` relativo ao diretório de trabalho: nesse modo, crie `backend/.env` apenas com `JWT_SECRET` (e eventuais `SPRING_DATASOURCE_*` ou outras variáveis que queira sobrescrever). Esse arquivo local é ignorado pelo Git e não precisa duplicar o exemplo da raiz. Sem sobrescritas de banco, a aplicação usa `localhost:5432/foody_delivery`, usuário `foody` e senha `foody_local`, os mesmos padrões do Compose. Se alterar os valores `POSTGRES_*` ou `POSTGRES_PORT` na configuração da raiz, ajuste as propriedades `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD` em `backend/.env` para a execução direta: as variáveis `POSTGRES_*` são consumidas pelo Compose e não são aliases Spring.
 
@@ -57,7 +58,8 @@ O frontend React + TypeScript + Vite fica em `frontend/`. Para instalar dependê
 ## Autenticação
 
 - `POST /api/auth/register`: cria um usuário, normaliza o e-mail e armazena a senha com BCrypt.
-- `POST /api/auth/login`: autentica e emite JWT HS256 com issuer, UUID no subject e expiração configurável.
+- `POST /api/auth/login`: autentica, emite JWT HS256 com issuer, UUID no subject e expiração configurável, e cria uma sessão persistente em cookie `HttpOnly`.
+- `POST /api/auth/refresh`: renova o JWT usando o cookie de sessão; `POST /api/auth/logout` revoga a sessão.
 - `GET /api/users/me`: requer `Authorization: Bearer <token>`.
 
 Senhas devem conter ao menos oito caracteres, letras maiúsculas/minúsculas, um dígito e um símbolo. O e-mail é único no PostgreSQL.
@@ -123,7 +125,7 @@ Itens exigem nome, quantidade maior que zero e preço unitário maior que zero; 
 
 Transições inválidas e conflitos de atualização concorrente retornam `409 Conflict`; status ausente ou inválido retornam `400 Bad Request`. Para demonstrar o fluxo do MVP, o próprio cliente pode avançar o status. Em produção, esse endpoint deve ser limitado a restaurante, operação ou logística autorizados.
 
-O schema é criado pelas migrations Flyway `V2__create_orders.sql`, `V3__add_order_geocoding.sql` e `V4__create_order_status_history.sql`, incluindo itens, endereço incorporado, índices de consulta, versão para optimistic locking e campos de geocodificação. O Swagger documenta os endpoints em `/swagger-ui/index.html` e permite executá-los após informar o JWT em **Authorize**.
+O schema de pedidos é criado pelas migrations Flyway `V2__create_orders.sql`, `V3__add_order_geocoding.sql` e `V4__create_order_status_history.sql`, incluindo itens, endereço incorporado, índices de consulta, versão para optimistic locking e campos de geocodificação. A V5 cria as sessões persistentes de autenticação. O Swagger documenta os endpoints em `/swagger-ui/index.html` e permite executá-los após informar o JWT em **Authorize**.
 
 ### Histórico de status
 

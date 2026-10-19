@@ -23,6 +23,8 @@ auth:
     issuer: ${JWT_ISSUER:foody-delivery}
     expiration-seconds: ${JWT_EXPIRATION_SECONDS:3600}
     allowed-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
+  cookie:
+    secure: ${AUTH_COOKIE_SECURE:false}
 geocoding:
   nominatim:
     base-url: ${NOMINATIM_BASE_URL:https://nominatim.openstreetmap.org}
