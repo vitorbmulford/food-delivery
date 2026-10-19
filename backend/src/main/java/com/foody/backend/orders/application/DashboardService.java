@@ -29,18 +29,18 @@ public class DashboardService {
         var start = Timestamp.from(from.atStartOfDay(BUSINESS_ZONE).toInstant());
         var end = Timestamp.from(to.plusDays(1).atStartOfDay(BUSINESS_ZONE).toInstant());
 
-        long total = scalar("SELECT count(*) FROM orders WHERE customer_id = ? AND created_at >= ? AND created_at < ?",
+        long total = scalar("SELECT count(*) FROM orders WHERE owner_id = ? AND created_at >= ? AND created_at < ?",
                 ownerId, start, end);
         Map<OrderStatus, Long> statuses = new EnumMap<>(OrderStatus.class);
         for (OrderStatus status : OrderStatus.values()) statuses.put(status, 0L);
-        jdbc.query("SELECT status, count(*) FROM orders WHERE customer_id = ? AND created_at >= ? AND created_at < ? GROUP BY status",
+        jdbc.query("SELECT status, count(*) FROM orders WHERE owner_id = ? AND created_at >= ? AND created_at < ? GROUP BY status",
                 (org.springframework.jdbc.core.RowCallbackHandler) rs -> statuses.put(OrderStatus.valueOf(rs.getString(1)), rs.getLong(2)), ownerId, start, end);
 
         long delivered = scalar("SELECT count(*) FROM order_status_history h JOIN orders o ON o.id = h.order_id "
-                + "WHERE o.customer_id = ? AND h.new_status = 'ENTREGUE' AND h.changed_at >= ? AND h.changed_at < ?",
+                + "WHERE o.owner_id = ? AND h.new_status = 'ENTREGUE' AND h.changed_at >= ? AND h.changed_at < ?",
                 ownerId, start, end);
         long cancelled = scalar("SELECT count(*) FROM order_status_history h JOIN orders o ON o.id = h.order_id "
-                + "WHERE o.customer_id = ? AND h.new_status = 'CANCELADO' AND h.changed_at >= ? AND h.changed_at < ?",
+                + "WHERE o.owner_id = ? AND h.new_status = 'CANCELADO' AND h.changed_at >= ? AND h.changed_at < ?",
                 ownerId, start, end);
 
         List<DashboardResponse.DailyActivity> daily = jdbc.query("""
@@ -48,13 +48,13 @@ public class DashboardService {
                   SELECT generate_series(?::date, ?::date, interval '1 day')::date AS day
                 ), created AS (
                   SELECT (created_at AT TIME ZONE 'America/Sao_Paulo')::date AS day, count(*) AS amount
-                  FROM orders WHERE customer_id = ? AND created_at >= ? AND created_at < ? GROUP BY 1
+                  FROM orders WHERE owner_id = ? AND created_at >= ? AND created_at < ? GROUP BY 1
                 ), events AS (
                   SELECT (h.changed_at AT TIME ZONE 'America/Sao_Paulo')::date AS day,
                     count(*) FILTER (WHERE h.new_status = 'ENTREGUE') AS delivered,
                     count(*) FILTER (WHERE h.new_status = 'CANCELADO') AS cancelled
                   FROM order_status_history h JOIN orders o ON o.id = h.order_id
-                  WHERE o.customer_id = ? AND h.new_status IN ('ENTREGUE', 'CANCELADO')
+                  WHERE o.owner_id = ? AND h.new_status IN ('ENTREGUE', 'CANCELADO')
                     AND h.changed_at >= ? AND h.changed_at < ? GROUP BY 1
                 )
                 SELECT days.day, coalesce(created.amount, 0), coalesce(events.delivered, 0), coalesce(events.cancelled, 0)
@@ -63,11 +63,11 @@ public class DashboardService {
                 rs.getLong(2), rs.getLong(3), rs.getLong(4)), from, to, ownerId, start, end, ownerId, start, end);
 
         List<DashboardResponse.DashboardOrder> recent = jdbc.query("SELECT id, created_at, status FROM orders "
-                        + "WHERE customer_id = ? AND created_at >= ? AND created_at < ? ORDER BY created_at DESC LIMIT 8",
+                        + "WHERE owner_id = ? AND created_at >= ? AND created_at < ? ORDER BY created_at DESC LIMIT 8",
                 (rs, rowNum) -> new DashboardResponse.DashboardOrder(rs.getObject(1, UUID.class),
                         rs.getTimestamp(2).toInstant(), OrderStatus.valueOf(rs.getString(3))), ownerId, start, end);
         List<DashboardResponse.DashboardOrder> ongoing = jdbc.query("SELECT id, created_at, status FROM orders "
-                        + "WHERE customer_id = ? AND status IN ('RECEBIDO', 'EM_PREPARO', 'SAIU_PARA_ENTREGA') "
+                        + "WHERE owner_id = ? AND status IN ('RECEBIDO', 'EM_PREPARO', 'SAIU_PARA_ENTREGA') "
                         + "ORDER BY created_at ASC LIMIT 10",
                 (rs, rowNum) -> new DashboardResponse.DashboardOrder(rs.getObject(1, UUID.class),
                         rs.getTimestamp(2).toInstant(), OrderStatus.valueOf(rs.getString(3))), ownerId);

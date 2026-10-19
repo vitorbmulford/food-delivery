@@ -60,7 +60,7 @@ class OrderTest {
         assertThrows(OrderValueOutOfRangeException.class,
                 () -> OrderItem.create("Burger", 2, new BigDecimal("60000000000000000.00")));
         User customer = new User(UUID.randomUUID(), "Customer", "customer@example.com", "hash", now);
-        assertThrows(OrderValueOutOfRangeException.class, () -> Order.create(customer,
+        assertThrows(OrderValueOutOfRangeException.class, () -> Order.create(customer, "Maria Silva", "11999999999", null,
                 new DeliveryAddress("Street", "1", null, "Center", "City", "SP", "01001000"),
                 List.of(OrderItem.create("Burger", 1, new BigDecimal("60000000000000000.00")),
                         OrderItem.create("Soda", 1, new BigDecimal("60000000000000000.00"))), now));
@@ -104,7 +104,7 @@ class OrderTest {
 
     private Order order() {
         User customer = new User(UUID.randomUUID(), "Customer", "customer@example.com", "hash", now);
-        return Order.create(customer, new DeliveryAddress("Street", "1", null, "Center", "City", "SP", "01001000"),
+        return Order.create(customer, "Maria Silva", "11999999999", null, new DeliveryAddress("Street", "1", null, "Center", "City", "SP", "01001000"),
                 List.of(OrderItem.create("Burger", 2, new BigDecimal("32.90")), OrderItem.create("Soda", 1, new BigDecimal("8.50"))), now);
     }
 }

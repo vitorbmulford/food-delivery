@@ -35,10 +35,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.annotation.Validated;
+import jakarta.validation.constraints.Size;
 
 @RestController
+@Validated
 @RequestMapping("/api/orders")
-@Tag(name = "Orders", description = "Orders belonging to the authenticated customer")
+@Tag(name = "Orders", description = "Orders managed by the authenticated operator")
 @SecurityRequirement(name = "bearerAuth")
 public class OrderController {
     private final OrderService orders;
@@ -56,7 +59,7 @@ public class OrderController {
     public DashboardResponse dashboard(@AuthenticationPrincipal Jwt jwt,
                                        @RequestParam LocalDate from,
                                        @RequestParam LocalDate to) {
-        return dashboard.getDashboard(customerId(jwt), from, to);
+        return dashboard.getDashboard(ownerId(jwt), from, to);
     }
 
     @PostMapping
@@ -65,19 +68,21 @@ public class OrderController {
     @ApiResponse(responseCode = "400", description = "Invalid item or delivery address")
     @ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
     public ResponseEntity<OrderResponse> create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody CreateOrderRequest request) {
-        OrderResponse order = orders.create(customerId(jwt), request);
+        OrderResponse order = orders.create(ownerId(jwt), request);
         return ResponseEntity.created(URI.create("/api/orders/" + order.id())).body(order);
     }
 
     @GetMapping
-    @Operation(summary = "List authenticated customer's orders", description = "Results are paged and sorted from newest to oldest. Maximum page size is 50.")
+    @Operation(summary = "List the authenticated operator's orders", description = "Results are paged and sorted from newest to oldest. Search matches customer name, email, phone digits, or the exact UUID order ID. Maximum page size is 50.")
     @ApiResponse(responseCode = "200", description = "Paged orders")
     @ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
     public Page<OrderResponse> list(@AuthenticationPrincipal Jwt jwt,
                                     @Parameter(description = "Zero-based page", in = ParameterIn.QUERY) @RequestParam(defaultValue = "0") int page,
                                     @Parameter(description = "Page size (1-50)", in = ParameterIn.QUERY) @RequestParam(defaultValue = "10") int size,
-                                    @RequestParam(required = false) OrderStatus status) {
-        return orders.list(customerId(jwt), status, page, size);
+                                    @RequestParam(required = false) OrderStatus status,
+                                    @Size(max = 100, message = "A busca deve ter no máximo 100 caracteres.")
+                                    @RequestParam(required = false) String search) {
+        return orders.list(ownerId(jwt), status, search, page, size);
     }
 
     @GetMapping("/{id}")
@@ -86,7 +91,7 @@ public class OrderController {
     @ApiResponse(responseCode = "404", description = "Order not found")
     @ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
     public OrderResponse get(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
-        return orders.get(customerId(jwt), id);
+        return orders.get(ownerId(jwt), id);
     }
 
     @GetMapping("/{id}/history")
@@ -98,7 +103,7 @@ public class OrderController {
     @ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
     @ApiResponse(responseCode = "404", description = "Order not found")
     public List<OrderStatusHistoryResponse> history(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
-        return orders.history(customerId(jwt), id);
+        return orders.history(ownerId(jwt), id);
     }
 
     @PatchMapping("/{id}/status")
@@ -110,7 +115,7 @@ public class OrderController {
     @ApiResponse(responseCode = "409", description = "Invalid transition or concurrent update")
     public OrderResponse updateStatus(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
                                       @Valid @RequestBody UpdateOrderStatusRequest request) {
-        return orders.updateStatus(customerId(jwt), id, request.status());
+        return orders.updateStatus(ownerId(jwt), id, request.status());
     }
 
     @PostMapping("/{id}/geocode")
@@ -118,7 +123,7 @@ public class OrderController {
     @ApiResponse(responseCode = "202", description = "Geocoding accepted or already in progress")
     @ApiResponse(responseCode = "404", description = "Order not found")
     public ResponseEntity<Void> geocode(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
-        orders.requestGeocoding(customerId(jwt), id);
+        orders.requestGeocoding(ownerId(jwt), id);
         return ResponseEntity.accepted().build();
     }
 
@@ -129,8 +134,8 @@ public class OrderController {
     @ApiResponse(responseCode = "404", description = "Order not found")
     public OrderResponse setManualLocation(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
                                            @Valid @RequestBody SetManualLocationRequest request) {
-        return orders.setManualLocation(customerId(jwt), id, request.latitude(), request.longitude());
+        return orders.setManualLocation(ownerId(jwt), id, request.latitude(), request.longitude());
     }
 
-    private UUID customerId(Jwt jwt) { return UUID.fromString(jwt.getSubject()); }
+    private UUID ownerId(Jwt jwt) { return UUID.fromString(jwt.getSubject()); }
 }

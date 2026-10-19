@@ -34,8 +34,14 @@ public class Order {
     @Id
     private UUID id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "customer_id", nullable = false)
-    private User customer;
+    @JoinColumn(name = "owner_id", nullable = false)
+    private User owner;
+    @Column(name = "customer_name", length = 120)
+    private String customerName;
+    @Column(name = "customer_phone", length = 11)
+    private String customerPhone;
+    @Column(name = "customer_email", length = 320)
+    private String customerEmail;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private OrderStatus status;
@@ -73,17 +79,22 @@ public class Order {
 
     protected Order() { }
 
-    public static Order create(User customer, DeliveryAddress deliveryAddress, List<OrderItem> items, Instant now) {
+    public static Order create(User owner, String customerName, String customerPhone, String customerEmail,
+                               DeliveryAddress deliveryAddress, List<OrderItem> items, Instant now) {
         BigDecimal totalAmount = money(items.stream().map(OrderItem::getSubtotal).reduce(BigDecimal.ZERO, BigDecimal::add));
         if (totalAmount.compareTo(OrderItem.MAX_PERSISTED_AMOUNT) > 0) {
             throw new OrderValueOutOfRangeException();
         }
-        return new Order(customer, deliveryAddress, items, now, totalAmount);
+        return new Order(owner, customerName, customerPhone, customerEmail, deliveryAddress, items, now, totalAmount);
     }
 
-    private Order(User customer, DeliveryAddress deliveryAddress, List<OrderItem> items, Instant now, BigDecimal totalAmount) {
+    private Order(User owner, String customerName, String customerPhone, String customerEmail,
+                  DeliveryAddress deliveryAddress, List<OrderItem> items, Instant now, BigDecimal totalAmount) {
         this.id = UUID.randomUUID();
-        this.customer = customer;
+        this.owner = owner;
+        this.customerName = customerName;
+        this.customerPhone = customerPhone;
+        this.customerEmail = customerEmail;
         this.status = OrderStatus.RECEBIDO;
         this.deliveryAddress = deliveryAddress;
         items.forEach(item -> {
@@ -147,7 +158,10 @@ public class Order {
     private static BigDecimal money(BigDecimal amount) { return amount.setScale(MONEY_SCALE, RoundingMode.HALF_UP); }
 
     public UUID getId() { return id; }
-    public User getCustomer() { return customer; }
+    public User getOwner() { return owner; }
+    public String getCustomerName() { return customerName; }
+    public String getCustomerPhone() { return customerPhone; }
+    public String getCustomerEmail() { return customerEmail; }
     public OrderStatus getStatus() { return status; }
     public DeliveryAddress getDeliveryAddress() { return deliveryAddress; }
     public List<OrderItem> getItems() { return List.copyOf(items); }

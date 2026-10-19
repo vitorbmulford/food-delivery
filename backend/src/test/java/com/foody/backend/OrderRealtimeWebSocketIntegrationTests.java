@@ -56,7 +56,7 @@ import org.slf4j.LoggerFactory;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class OrderRealtimeWebSocketIntegrationTests {
     private static final String ORDER = """
-            {"items":[{"productName":"Pizza","quantity":1,"unitPrice":42.00}],
+            {"customer":{"name":"Maria Silva","phone":"11999999999"},"items":[{"productName":"Pizza","quantity":1,"unitPrice":42.00}],
             "deliveryAddress":{"street":"Rua das Flores","number":"120","neighborhood":"Centro","city":"São Paulo","state":"SP","postalCode":"01001000"}}""";
 
     @LocalServerPort private int port;
@@ -143,7 +143,7 @@ class OrderRealtimeWebSocketIntegrationTests {
         String token = registerAndLogin("realtime-rollback@example.com");
         String createdOrder = request("POST", "/api/orders", token, ORDER).body();
         String orderId = JsonPath.read(createdOrder, "$.id");
-        UUID ownerId = UUID.fromString(JsonPath.read(createdOrder, "$.customer.id"));
+        UUID ownerId = orders.findById(UUID.fromString(orderId)).orElseThrow().getOwner().getId();
         UUID id = UUID.fromString(orderId);
         LinkedBlockingQueue<Map<String, Object>> events = new LinkedBlockingQueue<>();
         WebSocketStompClient stomp = new WebSocketStompClient(new StandardWebSocketClient());
@@ -177,7 +177,7 @@ class OrderRealtimeWebSocketIntegrationTests {
         String token = registerAndLogin("realtime-concurrent@example.com");
         String createdOrder = request("POST", "/api/orders", token, ORDER).body();
         UUID id = UUID.fromString(JsonPath.read(createdOrder, "$.id"));
-        UUID ownerId = UUID.fromString(JsonPath.read(createdOrder, "$.customer.id"));
+        UUID ownerId = orders.findById(id).orElseThrow().getOwner().getId();
         LinkedBlockingQueue<Map<String, Object>> events = new LinkedBlockingQueue<>();
         WebSocketStompClient stomp = new WebSocketStompClient(new StandardWebSocketClient());
         stomp.setTaskScheduler(new ConcurrentTaskScheduler());
@@ -309,7 +309,7 @@ class OrderRealtimeWebSocketIntegrationTests {
             releaseLoser = new CountDownLatch(1);
         }
 
-        @Around("execution(* com.foody.backend.orders.infrastructure.persistence.OrderRepository.findByIdAndCustomerId(..))")
+        @Around("execution(* com.foody.backend.orders.infrastructure.persistence.OrderRepository.findByIdAndOwnerId(..))")
         public Object pauseAfterRead(ProceedingJoinPoint joinPoint) throws Throwable {
             Object result = joinPoint.proceed();
             if (bothLoaded.getCount() == 0) return result;

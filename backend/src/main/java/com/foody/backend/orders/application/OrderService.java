@@ -24,6 +24,7 @@ import com.foody.backend.orders.application.event.OrderStatusChangedEvent;
 import java.time.Instant;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -58,8 +59,8 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponse create(UUID customerId, CreateOrderRequest request) {
-        User customer = users.findById(customerId).orElseThrow(OrderNotFoundException::new);
+    public OrderResponse create(UUID ownerId, CreateOrderRequest request) {
+        User owner = users.findById(ownerId).orElseThrow(OrderNotFoundException::new);
         DeliveryAddress address = new DeliveryAddress(request.deliveryAddress().street(), request.deliveryAddress().number(),
                 request.deliveryAddress().complement(), request.deliveryAddress().neighborhood(), request.deliveryAddress().city(),
                 request.deliveryAddress().state().toUpperCase(java.util.Locale.ROOT), request.deliveryAddress().postalCode());
@@ -67,51 +68,55 @@ public class OrderService {
                 .map(item -> OrderItem.create(item.productName(), item.quantity(), item.unitPrice()))
                 .toList();
         Instant now = Instant.now();
-        Order order = orders.save(Order.create(customer, address, items, now));
-        statusHistory.save(new OrderStatusHistory(order, null, OrderStatus.RECEBIDO, now, customer));
+        Order order = orders.save(Order.create(owner, request.customer().name(), request.customer().phone(),
+                request.customer().email(), address, items, now));
+        statusHistory.save(new OrderStatusHistory(order, null, OrderStatus.RECEBIDO, now, owner));
         events.publishEvent(new OrderGeocodingRequestedEvent(order.getId()));
         ordersCreated.increment();
         return toResponse(order);
     }
 
     @Transactional(readOnly = true)
-    public Page<OrderResponse> list(UUID customerId, OrderStatus status, int page, int size) {
+    public Page<OrderResponse> list(UUID ownerId, OrderStatus status, String search, int page, int size) {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE),
                 Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Order> result = status == null ? orders.findByCustomerId(customerId, pageable)
-                : orders.findByCustomerIdAndStatus(customerId, status, pageable);
+        String normalizedSearch = normalizeSearch(search);
+        String phoneDigits = normalizedSearch.replaceAll("\\D", "");
+        UUID orderId = parseUuid(normalizedSearch);
+        Page<Order> result = orders.searchByOwner(ownerId, status, normalizedSearch, phoneDigits,
+                !normalizedSearch.isEmpty(), !phoneDigits.isEmpty(), orderId != null, orderId, pageable);
         return result.map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
-    public OrderResponse get(UUID customerId, UUID id) {
-        return toResponse(findOwned(id, customerId));
+    public OrderResponse get(UUID ownerId, UUID id) {
+        return toResponse(findOwned(id, ownerId));
     }
 
     @Transactional
-    public OrderResponse updateStatus(UUID customerId, UUID id, OrderStatus status) {
-        Order order = findOwned(id, customerId);
+    public OrderResponse updateStatus(UUID ownerId, UUID id, OrderStatus status) {
+        Order order = findOwned(id, ownerId);
         OrderStatus previousStatus = order.getStatus();
         Instant now = Instant.now();
         order.transitionTo(status, now);
-        OrderStatusHistory history = statusHistory.save(new OrderStatusHistory(order, previousStatus, status, now, order.getCustomer()));
-        events.publishEvent(new OrderStatusChangedEvent(order.getId(), order.getCustomer().getId(), previousStatus,
+        OrderStatusHistory history = statusHistory.save(new OrderStatusHistory(order, previousStatus, status, now, order.getOwner()));
+        events.publishEvent(new OrderStatusChangedEvent(order.getId(), order.getOwner().getId(), previousStatus,
                 status, history.getId(), history.getChangedAt()));
         statusChanged.increment();
         return toResponse(order);
     }
 
     @Transactional(readOnly = true)
-    public List<OrderStatusHistoryResponse> history(UUID customerId, UUID id) {
-        findOwned(id, customerId);
+    public List<OrderStatusHistoryResponse> history(UUID ownerId, UUID id) {
+        findOwned(id, ownerId);
         return statusHistory.findByOrderIdOrderByChangedAtAscIdAsc(id).stream()
                 .map(this::toHistoryResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public boolean requestGeocoding(UUID customerId, UUID id) {
-        Order order = findOwned(id, customerId);
+    public boolean requestGeocoding(UUID ownerId, UUID id) {
+        Order order = findOwned(id, ownerId);
         if (order.getCoordinates() != null) {
             return false;
         }
@@ -119,19 +124,19 @@ public class OrderService {
     }
 
     @Transactional
-    public OrderResponse setManualLocation(UUID customerId, UUID id, BigDecimal latitude, BigDecimal longitude) {
-        Order order = findOwned(id, customerId);
+    public OrderResponse setManualLocation(UUID ownerId, UUID id, BigDecimal latitude, BigDecimal longitude) {
+        Order order = findOwned(id, ownerId);
         order.confirmManualCoordinates(new GeoCoordinates(latitude, longitude), Instant.now());
         return toResponse(order);
     }
 
-    private Order findOwned(UUID id, UUID customerId) {
-        return orders.findByIdAndCustomerId(id, customerId).orElseThrow(OrderNotFoundException::new);
+    private Order findOwned(UUID id, UUID ownerId) {
+        return orders.findByIdAndOwnerId(id, ownerId).orElseThrow(OrderNotFoundException::new);
     }
 
     private OrderResponse toResponse(Order order) {
         DeliveryAddress address = order.getDeliveryAddress();
-        return new OrderResponse(order.getId(), new OrderCustomerResponse(order.getCustomer().getId(), order.getCustomer().getName(), order.getCustomer().getEmail()),
+        return new OrderResponse(order.getId(), new OrderCustomerResponse(order.getCustomerName(), order.getCustomerPhone(), order.getCustomerEmail()),
                 order.getStatus(), order.getItems().stream().map(item -> new OrderItemResponse(item.getId(), item.getProductName(), item.getQuantity(), item.getUnitPrice(), item.getSubtotal())).toList(),
                 new DeliveryAddressResponse(address.getStreet(), address.getNumber(), address.getComplement(), address.getNeighborhood(), address.getCity(), address.getState(), address.getPostalCode()),
                 order.getTotalAmount(), order.getCreatedAt(), order.getUpdatedAt(),
@@ -145,5 +150,19 @@ public class OrderService {
     private OrderStatusHistoryResponse toHistoryResponse(OrderStatusHistory event) {
         return new OrderStatusHistoryResponse(event.getId(), event.getPreviousStatus(), event.getNewStatus(),
                 event.getChangedAt(), event.getChangedBy() == null ? null : event.getChangedBy().getId());
+    }
+
+    private String normalizeSearch(String search) {
+        if (search == null || search.trim().isEmpty()) return "";
+        return search.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private UUID parseUuid(String search) {
+        if (search == null) return null;
+        try {
+            return UUID.fromString(search);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 }

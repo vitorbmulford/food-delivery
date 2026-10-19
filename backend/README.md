@@ -17,7 +17,13 @@
 - **Duração:** população de pedidos entregues no período que possuam os eventos requeridos em ordem cronológica: criação→primeiro `EM_PREPARO`, primeiro `EM_PREPARO`→primeiro `SAIU_PARA_ENTREGA`, primeiro `SAIU_PARA_ENTREGA`→primeiro `ENTREGUE` e criação→primeiro `ENTREGUE`. Cada duração traz seu tamanho de amostra; eventos ausentes ou fora de ordem não contribuem.
 - **Comparação:** intervalo imediatamente anterior com o mesmo número de dias. Percentuais são tratados na interface; quando a base anterior é zero, não há percentual.
 
-As somas de pedidos, itens e eventos são consultadas separadamente para evitar dupla contagem por joins. As consultas filtram `customer_id` derivado do `sub` JWT; nenhum identificador de usuário é aceito como parâmetro. Valores representam pedidos, não pagamentos ou receita recebida. Não são calculados lucro, custo ou despesas.
+As somas de pedidos, itens e eventos são consultadas separadamente para evitar dupla contagem por joins. As consultas filtram `owner_id` derivado do `sub` JWT; nenhum identificador de usuário é aceito como parâmetro. Valores representam pedidos, não pagamentos ou receita recebida. Não são calculados lucro, custo ou despesas.
+
+## Operador e cliente
+
+O usuário autenticado é o operador proprietário do pedido. O cliente não tem conta: `customer_name`, `customer_phone` e `customer_email` são um snapshot do contato informado ao criar o pedido, e o endereço do pedido é o endereço de entrega desse cliente. A migration `V8` preserva pedidos existentes com os campos de cliente nulos e renomeia a FK de propriedade para `owner_id`; não há preenchimento artificial com dados do operador.
+
+`POST /api/orders` exige `customer.name` e `customer.phone` (normalizado para 10 ou 11 dígitos) e aceita `customer.email` opcional. `GET /api/orders?search=` aplica, no PostgreSQL e antes da paginação, busca por nome/e-mail, telefone sem máscara ou UUID exato, sempre junto ao escopo do operador autenticado.
 
 ### Testes
 
