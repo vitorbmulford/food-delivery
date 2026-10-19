@@ -15,7 +15,7 @@ Backend de um desafio técnico para uma aplicação simplificada de gerenciament
 ```text
 food-delivery-completo/
 ├── backend/                 # Aplicação Spring Boot
-├── frontend/                # Planejado; ainda não implementado
+├── frontend/                # Aplicação React + TypeScript + Vite
 ├── compose.yaml
 ├── .env.example
 └── README.md
@@ -49,6 +49,10 @@ docker compose up --build
 ```
 
 A API fica em `http://localhost:8080` e o Swagger em `/swagger-ui/index.html`. Para encerrar preservando os dados, execute `docker compose down`.
+
+## Frontend
+
+O frontend React + TypeScript + Vite fica em `frontend/`. Para instalar dependências e iniciar o servidor de desenvolvimento, execute `npm install` e `npm run dev` nesse diretório. Os requisitos, variáveis de ambiente e demais scripts estão documentados em [frontend/README.md](frontend/README.md).
 
 ## Autenticação
 
