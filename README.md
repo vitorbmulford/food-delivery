@@ -150,6 +150,21 @@ docker compose up --build -d
 - Swagger: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
 - Health do frontend: [http://localhost:3000/health](http://localhost:3000/health)
 
+#### Banco de dados local
+
+O Docker Compose inicia **PostgreSQL 17**. Com os valores padrão de `.env.example`, conecte uma ferramenta executada na máquina host com:
+
+| Parâmetro | Valor padrão local |
+|---|---|
+| Host | `localhost` |
+| Porta | `5432` |
+| Banco | `foody_delivery` |
+| Usuário | `foody` |
+| Senha | `foody_local` |
+| JDBC na máquina host | `jdbc:postgresql://localhost:5432/foody_delivery` |
+
+O backend dentro do Compose usa o nome de serviço do banco como host: `jdbc:postgresql://postgres:5432/foody_delivery`. A porta publicada no host pode ser alterada por `POSTGRES_PORT`; nesse caso, use a porta configurada ao conectar de fora do Compose. Os valores podem ser substituídos no `.env`. `foody_local` é apenas uma senha padrão de desenvolvimento: altere-a para qualquer ambiente compartilhado e não publique credenciais reais.
+
 As portas podem ser alteradas por `FRONTEND_PORT`, `BACKEND_PORT` e `POSTGRES_PORT` no `.env`. Para parar os serviços mantendo o volume do banco:
 
 ```bash
