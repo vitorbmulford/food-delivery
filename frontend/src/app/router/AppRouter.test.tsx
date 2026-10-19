@@ -104,6 +104,17 @@ describe('autenticação e rotas', () => {
     expect(getCurrentUser).toHaveBeenCalledTimes(1)
   })
 
+  it('renderiza a página independente de Insights na rota protegida', async () => {
+    setAccessToken('existing-token')
+    renderRoute('/insights')
+
+    expect(await screen.findByRole('heading', { name: 'Insights' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Relatórios analíticos em breve' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Insights' })).toHaveAttribute('href', '/insights')
+  })
+
   it('redireciona usuários autenticados para fora das rotas públicas', async () => {
     setAccessToken('existing-token')
     renderRoute('/register')

@@ -113,7 +113,9 @@ describe('OrderRealtimeProvider', () => {
     mockAuth.isAuthenticated = true
     const queryClient = makeQueryClient()
     const filters = { page: 2, size: 10, status: 'EM_PREPARO' as const }
+    const dashboardKey = orderKeys.dashboard('2026-10-13', '2026-10-19')
     queryClient.setQueryData(orderKeys.list(filters), { content: [] })
+    queryClient.setQueryData(dashboardKey, { totalCreated: 1 })
     queryClient.setQueryData(orderKeys.detail(orderId), { id: orderId })
     queryClient.setQueryData(orderKeys.history(orderId), [])
     queryClient.setQueryData(orderKeys.detail('88c69b0e-e1da-4d5e-8ac0-0100d3757ca2'), {
@@ -128,6 +130,7 @@ describe('OrderRealtimeProvider', () => {
 
     await waitFor(() => {
       expect(queryClient.getQueryState(orderKeys.list(filters))?.isInvalidated).toBe(true)
+      expect(queryClient.getQueryState(dashboardKey)?.isInvalidated).toBe(true)
       expect(queryClient.getQueryState(orderKeys.detail(orderId))?.isInvalidated).toBe(true)
       expect(queryClient.getQueryState(orderKeys.history(orderId))?.isInvalidated).toBe(true)
     })

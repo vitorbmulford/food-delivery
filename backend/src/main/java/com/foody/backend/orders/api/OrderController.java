@@ -2,10 +2,12 @@ package com.foody.backend.orders.api;
 
 import com.foody.backend.orders.api.dto.CreateOrderRequest;
 import com.foody.backend.orders.api.dto.OrderResponse;
+import com.foody.backend.orders.api.dto.DashboardResponse;
 import com.foody.backend.orders.api.dto.OrderStatusHistoryResponse;
 import com.foody.backend.orders.api.dto.UpdateOrderStatusRequest;
 import com.foody.backend.orders.api.dto.SetManualLocationRequest;
 import com.foody.backend.orders.application.OrderService;
+import com.foody.backend.orders.application.DashboardService;
 import com.foody.backend.orders.domain.OrderStatus;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,6 +22,7 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
+import java.time.LocalDate;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -39,10 +42,22 @@ import org.springframework.web.bind.annotation.RestController;
 @SecurityRequirement(name = "bearerAuth")
 public class OrderController {
     private final OrderService orders;
+    private final DashboardService dashboard;
 
     @SuppressFBWarnings(value = "EI_EXPOSE_REP2",
             justification = "OrderService is a Spring-managed shared collaborator intentionally retained by this singleton.")
-    public OrderController(OrderService orders) { this.orders = orders; }
+    public OrderController(OrderService orders, DashboardService dashboard) {
+        this.orders = orders;
+        this.dashboard = dashboard;
+    }
+
+    @GetMapping("/dashboard")
+    @Operation(summary = "Get operational dashboard metrics", description = "Created orders are scoped by createdAt; delivered and cancelled counts are status history events in the requested Sao Paulo calendar period. Ongoing orders include all current open orders.")
+    public DashboardResponse dashboard(@AuthenticationPrincipal Jwt jwt,
+                                       @RequestParam LocalDate from,
+                                       @RequestParam LocalDate to) {
+        return dashboard.getDashboard(customerId(jwt), from, to);
+    }
 
     @PostMapping
     @Operation(summary = "Create an order", description = "Creates an order with initial status RECEBIDO. The total is calculated by the server.")
