@@ -62,10 +62,20 @@ const statusByIndex: OrderStatus[] = [
   'ENTREGUE',
   'EM_PREPARO',
 ]
+function hashDemoIdPart(value: number) {
+  let hash = value | 0
+  hash = Math.imul(hash ^ (hash >>> 16), 0x21f0aaad)
+  hash = Math.imul(hash ^ (hash >>> 15), 0x735a2d97)
+  hash ^= hash >>> 15
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+const demoOrderId = (sequence: number) =>
+  `${hashDemoIdPart(sequence)}-${hashDemoIdPart(sequence + 0x10000).slice(0, 4)}-4${hashDemoIdPart(sequence + 0x20000).slice(0, 3)}-8${hashDemoIdPart(sequence + 0x30000).slice(0, 3)}-${hashDemoIdPart(sequence + 0x40000)}${sequence.toString(16).padStart(4, '0')}`
 
 const historyById = new Map<string, OrderStatusHistory[]>()
 const orders: Order[] = Array.from({ length: 96 }, (_, index) => {
-  const id = `10000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`
+  const id = demoOrderId(index + 1)
   const daysAgo = (index * 7 + Math.floor(index / 4) * 3) % 91
   const created = new Date()
   created.setDate(created.getDate() - daysAgo)
@@ -135,6 +145,7 @@ const orders: Order[] = Array.from({ length: 96 }, (_, index) => {
     geocodingSuggestionLevel: null,
   }
 })
+let nextDemoOrderSequence = orders.length
 
 const asDate = (value: string) => new Date(`${value}T00:00:00-03:00`)
 const dateKey = (value: string) =>
@@ -231,7 +242,7 @@ export function demoGetHistory(id: string): OrderStatusHistory[] {
 }
 export function demoCreateOrder(input: CreateOrderInput): Order {
   const now = new Date().toISOString()
-  const id = `30000000-0000-4000-8000-${String(Date.now()).slice(-12).padStart(12, '0')}`
+  const id = demoOrderId(++nextDemoOrderSequence)
   const items = input.items.map((item, index) => ({
     ...item,
     id: `${id.slice(-6)}-${index + 1}`,
