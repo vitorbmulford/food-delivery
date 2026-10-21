@@ -6,9 +6,30 @@ No frontend, Material UI compõe a interface, React Router organiza a navegaçã
 
 A aplicação atende ao núcleo do desafio técnico **Mini Rastreador de Pedidos**: cadastro e autenticação, criação de pedidos com cliente, itens e endereço, consulta e atualização de status. O cliente do pedido é independente da conta do operador que o registra. Também inclui recursos complementares, como notificações em tempo real, geocodificação e mapa, Dashboard, Insights e histórico de status.
 
+## Stack tecnológica e decisões de engenharia
+
+| Área | Tecnologias | Aplicação no projeto |
+|---|---|---|
+| Backend e API | Java 21, Spring Boot, Spring MVC, Spring Security, Spring Data JPA, Bean Validation, JWT e BCrypt | API REST para autenticação e pedidos; endpoints protegidos por JWT, senhas armazenadas com BCrypt e validação de entrada. Springdoc OpenAPI publica a documentação da API. |
+| Frontend | React, TypeScript, Vite, Material UI, React Router, TanStack Query, Axios, React Hook Form e Zod | Interface administrativa, navegação, formulários validados e consultas REST com cache e invalidação após mutações ou eventos recebidos. |
+| Persistência | PostgreSQL 17, JPA e Flyway | Pedidos, itens e histórico persistidos com migrations versionadas. `@Version` detecta atualizações concorrentes; o backend calcula subtotais e total com `BigDecimal`. |
+| Tempo real | WebSocket, STOMP e `@stomp/stompjs` | Mudanças de status são notificadas após o commit e usadas pelo frontend para atualizar consultas. As notificações são best effort; REST e banco permanecem como fonte de verdade. |
+| Endereço e localização | ViaCEP, Nominatim, OpenStreetMap, Leaflet e React Leaflet | Consulta de CEP no formulário, geocodificação assíncrona e exibição/seleção manual de coordenadas no mapa. Os serviços são externos e tarefas de geocodificação ficam em memória. |
+| Resiliência e limites | Resilience4j e Bucket4j | Retry, circuit breaker e limitação de chamadas protegem integrações e endpoints; o estado desses mecanismos é local a cada instância. |
+| Qualidade e observabilidade | JUnit 5, Spring Boot Test, Testcontainers, Vitest, Testing Library, JaCoCo, SpotBugs, ESLint, Micrometer e Actuator | Testes unitários e de integração, inclusive com PostgreSQL via Testcontainers; análise estática e métricas da aplicação. JaCoCo gera relatório, sem meta mínima de cobertura configurada. |
+| Infraestrutura | Docker, Docker Compose e Nginx | Compose orquestra PostgreSQL, backend e frontend; Nginx serve a SPA, encaminha `/api` e `/ws`, e os serviços têm health checks. |
+
+### Decisões e compromissos
+
+- **Consistência:** o domínio define as transições permitidas; pedido e histórico são gravados na mesma transação. `@Version` transforma disputas concorrentes em conflito `409`. O total é calculado no backend, mas os preços unitários ainda vêm da requisição; não há catálogo para validá-los contra preços oficiais.
+- **Segurança:** endpoints de pedido exigem autenticação e consultas são escopadas ao operador proprietário. Um pedido de outra conta retorna `404`; no MVP, o proprietário pode atualizar status e não há autorização por papéis distintos.
+- **Integrações:** geocodificação e notificações começam depois do commit, para que uma falha externa não reverta uma alteração persistida. A geocodificação tem retry e circuit breaker; tarefas, broker STOMP e limitadores são locais à instância, então não há processamento durável nem estado compartilhado entre réplicas.
+- **Uso da aplicação:** o fluxo reúne cadastro, formulário de pedido, acompanhamento de status e histórico, painel e indicadores. O modo de demonstração usa dados fictícios em memória e serve para explorar a interface, não para comprovar integração ou persistência no backend.
+- **Execução e verificação:** Docker Compose e Nginx oferecem um caminho documentado para iniciar e acessar a aplicação. Os comandos de teste e os registros históricos estão em [Testes e validação](#testes-e-validação); vídeos dos fluxos real e demonstrativo estão em [Demonstrações](#demonstrações). Os registros históricos não afirmam validação do checkout atual.
+
 ## Demonstrações
 
-Os vídeos mostram primeiro a aplicação integrada em funcionamento real, integração, persistência de dados. Em seguida, a demonstração com dados simulados apresenta como Dashboard e Insights se comportam com um volume maior de pedidos. Esses dados foram criados para ilustrar os recursos analíticos; não são registros persistidos no backend.
+O primeiro vídeo apresenta a aplicação integrada e o fluxo com persistência. O segundo usa dados simulados para ilustrar Dashboard e Insights com um volume maior de pedidos; esses dados são fictícios e não são persistidos no backend.
 
 ### Aplicação integrada — funcionamento real
 
@@ -87,14 +108,6 @@ Para a geocodificação, chamadas ao Nominatim têm timeout e limite local de um
 
 JUnit e Testcontainers exercitam o backend com PostgreSQL; Vitest e Testing Library cobrem o frontend. JaCoCo gera relatórios de cobertura e SpotBugs analisa o backend. Docker Compose reúne banco, API e interface, enquanto Nginx serve a SPA e encaminha `/api` e `/ws`. Isso simplifica a execução integrada e a verificação dos fluxos; os testes de integração precisam de Docker e não há meta mínima de cobertura.
 
-## Abordagem de engenharia e qualidade
-
-No **backend**, Java 21 e Spring Boot organizam a API REST e as regras do domínio. Spring Data JPA e PostgreSQL cuidam da persistência relacional, e Flyway versiona a evolução do schema. Essa separação conecta os fluxos de pedidos a dados persistidos e consultáveis.
-
-No **frontend**, React com TypeScript estrutura páginas e componentes; Material UI fornece os componentes visuais, Vite cuida do desenvolvimento e build, e TanStack Query gerencia consultas e atualização de dados. A interface conversa com o backend por REST e também recebe eventos STOMP. ViaCEP, Nominatim, OpenStreetMap e Leaflet compõem os fluxos de endereço e localização descritos acima.
-
-A qualidade é apoiada por testes unitários e de integração com JUnit e Testcontainers, testes de interface com Vitest e Testing Library, análise estática com SpotBugs, relatórios JaCoCo e lint do frontend. Docker Compose e Nginx oferecem uma execução integrada. Os comandos e resultados registrados estão em [Testes e validação](#testes-e-validação); as limitações e trade-offs de sessão, mecanismos em memória e serviços externos estão detalhados adiante.
-
 O Codex foi utilizado como ferramenta de apoio ao desenvolvimento e à revisão. As sugestões foram avaliadas em relação ao código e aos resultados de validação; decisões técnicas e aprovação do conteúdo permaneceram sob responsabilidade do desenvolvedor.
 
 ## Arquitetura
@@ -111,16 +124,6 @@ flowchart LR
 ```
 
 No fluxo principal, o navegador envia um pedido pela API REST; o backend valida os dados, calcula o total e persiste no PostgreSQL. Geocodificação é iniciada após a gravação. Eventos de status são publicados após o commit. ViaCEP e os tiles do mapa são acessados pelo navegador.
-
-### Tecnologias
-
-- **Backend:** Java 21, Spring Boot, Spring MVC, Spring Security, OAuth2 Resource Server, Spring Data JPA, Bean Validation e Springdoc OpenAPI.
-- **Banco e schema:** PostgreSQL 17 e Flyway, com migrations `V1` a `V8`.
-- **Frontend:** React, TypeScript, Vite, React Router, TanStack Query, Axios, React Hook Form e Zod.
-- **Interface e mapas:** Material UI, Leaflet e React Leaflet.
-- **Comunicação e resiliência:** STOMP, Bucket4j e Resilience4j.
-- **Testes e análise:** JUnit 5, Testcontainers, Vitest, Testing Library, JaCoCo e SpotBugs.
-- **Execução:** Docker Compose e Nginx.
 
 ## Como executar
 
@@ -276,9 +279,7 @@ O Maven executa JaCoCo e SpotBugs durante `verify`. JaCoCo gera relatório, sem 
 
 ### Registro da validação técnica
 
-Na validação executada em **19/10/2026**, no `HEAD` `a028d16`, foram registrados: backend com 69 testes aprovados; frontend com 73 testes aprovados; lint e build de produção aprovados; SpotBugs sem achados; Docker Compose com os serviços saudáveis; e smoke tests do fluxo obrigatório aprovados. O diretório local `backend/target` ainda contém relatórios Surefire de 19/10/2026 com 69 testes e zero falhas, relatório JaCoCo e saída SpotBugs sem instâncias de bugs.
-
-Esses resultados pertencem à validação técnica daquele `HEAD`; não foram reexecutados durante esta revisão editorial. A revisão confirma que o `HEAD` permanece em `a028d16` e que a alteração local se limita ao README. O arquivo [docs/VALIDACAO_FINAL.md](docs/VALIDACAO_FINAL.md) é um registro mais antigo, de outro estado e com contagens diferentes; não é a fonte dos resultados acima.
+Um registro de validação de **19/10/2026** atribuído ao commit `a028d16` relata 69 testes backend e 73 testes frontend aprovados, lint e build de produção aprovados, SpotBugs sem achados, serviços saudáveis no Docker Compose e smoke tests do fluxo principal. Esses resultados pertencem àquele checkout e não foram reexecutados para o estado atual do repositório. [docs/VALIDACAO_FINAL.md](docs/VALIDACAO_FINAL.md) é outro registro, de um estado anterior e com resultados diferentes; ambos devem ser lidos como evidência histórica, não como validação do commit atual.
 
 ## Decisões técnicas e trade-offs
 
